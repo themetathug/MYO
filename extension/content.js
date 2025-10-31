@@ -61,6 +61,16 @@ class JobCapture {
         sendResponse(this.currentJob);
       }
 
+      if (request.action === 'fetchAppliedJobs') {
+        this.fetchAppliedJobs().then(sendResponse);
+        return true;
+      }
+
+      if (request.action === 'scrapeLinkedInAppliedJobs') {
+        this.scrapeLinkedInAppliedJobs().then(sendResponse);
+        return true;
+      }
+
       if (request.action === 'getToken') {
         // Return token from localStorage if on frontend domain
         try {
@@ -316,6 +326,14 @@ class JobCapture {
       const locationText = this.extractText(selectors.location);
       const salaryText = this.extractText(selectors.salary);
 
+      // Detailed logging for LinkedIn selectors
+      if (hostname.includes('linkedin.com')) {
+        if (!companyText) console.error('❌ LinkedIn selector failed: company');
+        if (!positionText) console.error('❌ LinkedIn selector failed: position');
+        if (!locationText) console.error('❌ LinkedIn selector failed: location');
+        if (!salaryText) console.error('❌ LinkedIn selector failed: salary');
+      }
+
       console.log('📋 UK Job Tracker: Captured data:', {
         company: companyText || '(not found)',
         position: positionText || '(not found)',
@@ -337,6 +355,12 @@ class JobCapture {
       };
 
       // Validate captured data
+      if (hostname.includes('linkedin.com') && (!companyText || !positionText)) {
+        this.showNotification('❌ LinkedIn scraping failed: selectors may be outdated. Please update extension or report this issue.', 'error');
+        console.warn('⚠️ UK Job Tracker: LinkedIn selectors failed. company:', companyText, 'position:', positionText);
+        return { success: false, error: 'LinkedIn selectors failed' };
+      }
+
       if (!jobDetails.company || !jobDetails.position) {
         console.warn('⚠️ UK Job Tracker: Missing company or position, trying fallback...');
         return this.fallbackCapture(jobDetails);
@@ -360,6 +384,7 @@ class JobCapture {
 
     } catch (error) {
       console.error('❌ UK Job Tracker: Error capturing job:', error);
+      this.showNotification('❌ Error capturing job details. See console for details.', 'error');
       return { success: false, error: (error && error.message) || 'Unknown error' };
     }
   }
@@ -532,7 +557,7 @@ class JobCapture {
       });
 
       if (!response.ok) {
-        throw new Error(`Backend returned ${response.status}`);
+        return { success: false, error: `Backend returned ${response.status}` };
       }
 
       const result = await response.json();
@@ -588,6 +613,78 @@ class JobCapture {
     const timeSpent = Math.floor((endTime - this.startTime) / 1000); // in seconds
     chrome.storage.local.remove(['trackingStartTime']);
     return timeSpent;
+  }
+
+  async fetchAppliedJobs() {
+    try {
+      // Get auth token from chrome storage
+      let { token } = await chrome.storage.local.get(['token']);
+      if (!token && window.location.hostname === 'localhost' && window.location.port === '3000') {
+        try {
+          token = localStorage.getItem('token');
+          if (token) {
+            await chrome.storage.local.set({ token });
+            console.log('✅ UK Job Tracker: Token synced from page localStorage');
+          }
+        } catch (e) {}
+      }
+      if (!token) {
+        this.showNotification('❌ No auth token found. Please login and sync token.', 'error');
+        return { success: false, error: 'No auth token found' };
+      }
+      const response = await fetch('http://localhost:3001/api/applications', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        return { success: false, error: `Backend returned ${response.status}` };
+      }
+      const jobs = await response.json();
+      return { success: true, data: jobs };
+    } catch (error) {
+      console.error('❌ UK Job Tracker: Error fetching applied jobs:', error);
+      this.showNotification('❌ Error fetching applied jobs. See console for details.', 'error');
+      return { success: false, error: (error && error.message) || 'Unknown error' };
+    }
+  }
+
+  async scrapeLinkedInAppliedJobs() {
+    try {
+      // Check if on LinkedIn "Applied Jobs" page
+      const url = window.location.href;
+      if (!url.includes('linkedin.com/my-items/applied-jobs')) {
+        this.showNotification('❌ Not on LinkedIn Applied Jobs page.', 'error');
+        return { success: false, error: 'Not on LinkedIn Applied Jobs page' };
+      }
+      // Scrape job cards
+      const jobCards = document.querySelectorAll('[data-occludable-job-id], .job-card-list__item');
+      const jobs = [];
+      jobCards.forEach(card => {
+        // Try to extract job title, company, link, and date applied
+        const titleEl = card.querySelector('.job-card-list__title, .job-card-container__link, a[data-control-name="job_card_company_link"]');
+        const companyEl = card.querySelector('.job-card-container__company-name, .job-card-list__company-name, .job-card-container__primary-description');
+        const linkEl = card.querySelector('a.job-card-list__title, a.job-card-container__link');
+        const dateEl = card.querySelector('.job-card-container__listed-time, .job-card-list__footer-wrapper time');
+        jobs.push({
+          title: titleEl ? titleEl.textContent.trim() : '',
+          company: companyEl ? companyEl.textContent.trim() : '',
+          link: linkEl ? linkEl.href : '',
+          dateApplied: dateEl ? dateEl.textContent.trim() : '',
+        });
+      });
+      if (jobs.length === 0) {
+        this.showNotification('❌ No applied jobs found on this page.', 'error');
+        return { success: false, error: 'No applied jobs found' };
+      }
+      this.showNotification(`✅ Found ${jobs.length} applied jobs!`, 'success');
+      return { success: true, data: jobs };
+    } catch (error) {
+      console.error('❌ UK Job Tracker: Error scraping LinkedIn applied jobs:', error);
+      this.showNotification('❌ Error scraping LinkedIn applied jobs. See console for details.', 'error');
+      return { success: false, error: (error && error.message) || 'Unknown error' };
+    }
   }
 
   destroy() {
