@@ -30,8 +30,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Sync auth token from frontend localStorage
   async function syncAuthToken() {
     try {
-      // Method 1: Try to get token from the frontend app tab
-      const tabs = await chrome.tabs.query({ url: '*://localhost:3000/*' });
+      // Method 1: Try to get token from the frontend app tab (check multiple ports)
+      // Query for all localhost tabs with common ports
+      const allTabs = await chrome.tabs.query({});
+      const tabs = allTabs.filter(tab => 
+        tab.url && (
+          tab.url.includes('localhost:3000') || 
+          tab.url.includes('localhost:3001') || 
+          tab.url.includes('localhost:3002') || 
+          tab.url.includes('localhost:3003')
+        )
+      );
       if (tabs.length > 0) {
         try {
           // Inject script to read localStorage
@@ -119,7 +128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       successMessage.classList.remove('hidden');
       setTimeout(() => successMessage.classList.add('hidden'), 3000);
     } else {
-      tokenStatus.textContent = '❌ Failed to sync token. Make sure you are logged in at localhost:3000';
+      tokenStatus.textContent = '❌ Failed to sync token. Make sure you are logged in at localhost:3000/3001/3002';
       tokenStatus.className = 'status error';
     }
   }
@@ -331,14 +340,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         captureMyJobsBtn.disabled = true;
         captureMyJobsBtn.textContent = '⏳ Capturing...';
         
-        // Send message to content script to capture LinkedIn My Jobs
+        // Get current tab
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tabs.length === 0) {
           showError('No active tab found');
           return;
         }
         
-        const response = await chrome.tabs.sendMessage(tabs[0].id, { action: 'captureMyJobs' });
+        const tab = tabs[0];
+        const url = tab.url || '';
+        
+        // Check if on LinkedIn Applied Jobs page (new format)
+        if (!url.includes('linkedin.com') || !url.includes('my-items/saved-jobs') || !url.includes('cardType=APPLIED')) {
+          showError('⚠️ Please navigate to:\nhttps://www.linkedin.com/my-items/saved-jobs/?cardType=APPLIED\n\nThen click this button again!');
+          captureMyJobsBtn.disabled = false;
+          captureMyJobsBtn.textContent = '📥 Capture My Applied Jobs';
+          return;
+        }
+        
+        console.log('✅ On LinkedIn page:', url);
+        
+        // Try to inject content script if not already loaded
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js']
+          });
+          console.log('✅ Content script injected');
+          await new Promise(resolve => setTimeout(resolve, 500)); // Wait for script to initialize
+        } catch (injectError) {
+          console.log('⚠️ Could not inject script (may already be loaded):', injectError.message);
+        }
+        
+        // Send message to content script
+        let response;
+        try {
+          response = await chrome.tabs.sendMessage(tab.id, { action: 'captureMyJobs' });
+        } catch (msgError) {
+          // If message fails, content script might not be ready - try again
+          console.log('⚠️ Message failed, waiting and retrying...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          response = await chrome.tabs.sendMessage(tab.id, { action: 'captureMyJobs' });
+        }
         
         if (response && response.success) {
           showSuccess(`✅ Successfully imported ${response.count} jobs!`);
@@ -346,11 +389,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.close();
           }, 2000);
         } else {
-          showError(response.error || 'Failed to capture jobs');
+          const errorMsg = response?.error || 'Failed to capture jobs. Check console (F12) for details.';
+          showError(errorMsg);
+          console.error('❌ Capture failed:', response);
         }
       } catch (error) {
-        console.error('Error capturing My Jobs:', error);
-        showError('Make sure you are on LinkedIn My Jobs page and logged in');
+        console.error('❌ Error capturing My Jobs:', error);
+        showError('Error: ' + error.message + '\n\nCheck console (F12) on LinkedIn page for details.');
       } finally {
         captureMyJobsBtn.disabled = false;
         captureMyJobsBtn.textContent = '📥 Capture My Applied Jobs';

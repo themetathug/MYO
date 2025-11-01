@@ -426,6 +426,18 @@ router.get('/stats/summary', async (req, res) => {
     // Calculate average applications per day
     const avgApplicationsPerDay = days > 0 ? Math.round((total / days) * 10) / 10 : 0;
 
+    // Get daily application counts for the period
+    const dailyCounts: Record<string, number> = {};
+    allApps.forEach((app: any) => {
+      const appDate = new Date(app.applied_at || app.created_at);
+      const dateKey = appDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      dailyCounts[dateKey] = (dailyCounts[dateKey] || 0) + 1;
+    });
+
+    // Get total time spent across all applications
+    const totalTimeSpent = timeValues.reduce((sum: number, time: number) => sum + time, 0);
+    const totalTimeInHours = Math.round((totalTimeSpent / 60) * 10) / 10; // Convert minutes to hours
+
     // Count applications by specific statuses
     const interviews = allApps.filter((app: any) => 
       app.status === 'INTERVIEW_SCHEDULED' || 
@@ -533,6 +545,8 @@ router.get('/stats/summary', async (req, res) => {
       lastWeekApplications,
       monthlyApplications,
       avgApplicationsPerDay,
+      dailyCounts, // New: Daily application counts
+      totalTimeSpent: totalTimeInHours, // New: Total time in hours
       byStatus,
       interviews,
       offers,

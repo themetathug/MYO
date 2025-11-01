@@ -159,9 +159,40 @@ export const analyticsAPI = {
   },
 };
 
+// Scraper APIs
+export const scraperAPI = {
+  scrapeAll: async (params: {
+    keywords?: string;
+    location?: string;
+    sources?: string[];
+    limitPerSource?: number;
+  }) => {
+    return fetchWithAuth('/api/scraper/scrape', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  scrapeSource: async (source: string, params: {
+    keywords?: string;
+    location?: string;
+    limitPerSource?: number;
+  }) => {
+    return fetchWithAuth(`/api/scraper/scrape/${source}`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  getStatus: async () => {
+    return fetchWithAuth('/api/scraper/scrape/status');
+  },
+};
+
 export default {
   auth: authAPI,
   applications: applicationsAPI,
   coldEmails: coldEmailsAPI,
   analytics: analyticsAPI,
+  scraper: scraperAPI,
 };

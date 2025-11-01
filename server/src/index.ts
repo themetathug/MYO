@@ -17,6 +17,7 @@ import analyticsRouter from './routes/analytics.routes';
 import mlAnalyticsRouter from './routes/ml-analytics.routes';
 import userRouter from './routes/user.routes';
 import coldEmailsRouter from './routes/cold-emails.routes';
+import scraperRouter from './routes/scraper.routes';
 
 // Import middleware
 import { errorHandler } from './middleware/error.middleware';
@@ -46,9 +47,48 @@ app.use(helmet({
     },
   },
 }));
+// CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3003'
+];
+
+// Allow Chrome extensions and LinkedIn (for development)
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, or Chrome extensions)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Allow Chrome extension origins (chrome-extension://*)
+    if (origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
+    
+    // Allow LinkedIn (for extension testing)
+    if (origin.includes('linkedin.com')) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // For development, allow all origins (remove in production!)
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    // Otherwise, deny the request
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
@@ -85,6 +125,7 @@ app.use('/api/cold-emails', authMiddleware, coldEmailsRouter);
 app.use('/api/analytics', authMiddleware, analyticsRouter);
 app.use('/api/ml-analytics', authMiddleware, mlAnalyticsRouter);
 app.use('/api/users', authMiddleware, userRouter);
+app.use('/api/scraper', authMiddleware, scraperRouter);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

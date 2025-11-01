@@ -20,7 +20,7 @@ import { CustomCursor } from '../../components/CustomCursor';
 import { ParticleBackground } from '../../components/ParticleBackground';
 import { GlassCard } from '../../components/GlassCard';
 import { FlipCard } from '../../components/FlipCard';
-import { applicationsAPI } from '../../lib/api';
+import { applicationsAPI, scraperAPI } from '../../lib/api';
 
 ChartJS.register(
   CategoryScale,
@@ -38,6 +38,11 @@ export default function Dashboard() {
   const [timeRange, setTimeRange] = useState('30');
   const [loading, setLoading] = useState(true);
   const [applications, setApplications] = useState<any[]>([]);
+  const [scraping, setScraping] = useState(false);
+  const [showScrapeModal, setShowScrapeModal] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState<string>('');
+  const [scrapeSources, setScrapeSources] = useState<string[]>(['indeed', 'monster']);
+  const [scrapeLimit, setScrapeLimit] = useState(10);
   const [stats, setStats] = useState({
     totalApplications: 0,
     weeklyApplications: 0,
@@ -64,6 +69,8 @@ export default function Dashboard() {
     bestDayOfWeek: 'N/A',
     bestTimeOfDay: 'N/A',
     averageResponseTime: 0,
+    totalTimeSpent: 0,
+    dailyCounts: {} as Record<string, number>,
     cvVersionPerformance: [] as Array<{ name: string; conversionRate: number; interviews: number; applications: number }>
   });
 
@@ -84,8 +91,7 @@ export default function Dashboard() {
   }>>([]);
 
   // Fetch real data from backend
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = async () => {
       try {
         setLoading(true);
         
@@ -165,18 +171,34 @@ export default function Dashboard() {
           bestDayOfWeek: statsData.bestDayOfWeek || 'N/A',
           bestTimeOfDay: statsData.bestTimeOfDay || 'N/A',
           averageResponseTime: Math.round(statsData.averageResponseTime || 0),
+          totalTimeSpent: statsData.totalTimeSpent || 0,
+          dailyCounts: statsData.dailyCounts || {},
           cvVersionPerformance: [],
         });
 
         toast.success('Dashboard data loaded!');
       } catch (error: any) {
         console.error('Error fetching dashboard data:', error);
-        toast.error('Failed to load dashboard data: ' + error.message);
+        const errorMessage = error.message || 'Unknown error';
+        
+        // Check if it's an auth error
+        if (errorMessage.includes('authentication') || errorMessage.includes('session expired') || errorMessage.includes('401')) {
+          toast.error('Your session expired. Please login again.', { duration: 5000 });
+          setTimeout(() => {
+            localStorage.removeItem('token');
+            window.location.href = '/login?expired=true';
+          }, 2000);
+        } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+          toast.error('Cannot connect to server. Make sure backend is running on port 3001.', { duration: 7000 });
+        } else {
+          toast.error('Failed to load dashboard data: ' + errorMessage);
+        }
       } finally {
         setLoading(false);
       }
     };
 
+  useEffect(() => {
     fetchData();
   }, [timeRange]);
 
@@ -287,8 +309,235 @@ export default function Dashboard() {
                 <h1 className="text-5xl font-bold text-black mb-2">Dashboard</h1>
                 <p className="text-gray-600 text-lg">Track, analyze, and optimize your job search journey</p>
               </div>
+              
+              {/* Scraping Buttons */}
+              <div className="flex items-center gap-3">
+                <motion.button
+                  onClick={() => setShowScrapeModal(true)}
+                  disabled={scraping}
+                  whileHover={{ scale: scraping ? 1 : 1.05 }}
+                  whileTap={{ scale: scraping ? 1 : 0.95 }}
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {scraping ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Scraping...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xl">🔍</span>
+                      <span>Scrape Jobs</span>
+                    </>
+                  )}
+                </motion.button>
+                
+                <motion.button
+                  onClick={() => {
+                    window.open('https://www.linkedin.com/my-items/saved-jobs/', '_blank');
+                    toast.success('📋 Go to LinkedIn → Switch to "Applied" tab → Click Extension → Click "Capture My Applied Jobs"', { duration: 6000 });
+                  }}
+                  whileHover={{ scale: 1.05, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
+                  whileTap={{ scale: 0.95 }}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+                >
+                  <span className="text-xl">📥</span>
+                  Import from LinkedIn
+                </motion.button>
+              </div>
+
+              {/* Scraping Modal */}
+              {showScrapeModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 max-w-lg w-full"
+                  >
+                    <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">🔍 Scrape Jobs</h2>
+                    
+                    {scrapeProgress && (
+                      <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <p className="text-sm text-blue-700 dark:text-blue-300">{scrapeProgress}</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-4">
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          <strong>📋 How to import your LinkedIn Applied Jobs:</strong>
+                          <br />
+                          1. Open the browser extension popup
+                          <br />
+                          2. Navigate to: <code className="text-xs">linkedin.com/my-items/saved-jobs/?cardType=APPLIED</code>
+                          <br />
+                          3. Click "Capture My Applied Jobs" button
+                          <br />
+                          <br />
+                          This will import ALL your applied jobs from LinkedIn automatically!
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                          Job Boards (for general job search)
+                        </label>
+                        <div className="space-y-2">
+                          {['indeed', 'monster'].map((source) => (
+                            <label key={source} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={scrapeSources.includes(source)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setScrapeSources([...scrapeSources, source]);
+                                  } else {
+                                    setScrapeSources(scrapeSources.filter(s => s !== source));
+                                  }
+                                }}
+                                disabled={scraping}
+                                className="w-4 h-4"
+                              />
+                              <span className="text-gray-700 dark:text-gray-300 capitalize">{source}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Note: LinkedIn jobs should be imported via extension</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                          Jobs per Source (5-25)
+                        </label>
+                        <input
+                          type="number"
+                          value={scrapeLimit}
+                          onChange={(e) => setScrapeLimit(Math.min(25, Math.max(5, parseInt(e.target.value) || 10)))}
+                          min="5"
+                          max="25"
+                          className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:text-white"
+                          disabled={scraping}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 mt-6">
+                      <motion.button
+                        onClick={async () => {
+                          if (scrapeSources.length === 0) {
+                            toast.error('Please select at least one job board');
+                            return;
+                          }
+                          
+                          setScraping(true);
+                          setScrapeProgress('🚀 Starting job scraping...');
+                          setShowScrapeModal(false);
+                          
+                          try {
+                            // For MVP: Use default search terms, user can customize later
+                            const result = await scraperAPI.scrapeAll({
+                              keywords: 'developer', // Default for MVP
+                              location: 'United Kingdom', // Default for MVP
+                              sources: scrapeSources.length > 0 ? scrapeSources : ['indeed', 'monster'],
+                              limitPerSource: scrapeLimit || 10,
+                            });
+                            
+                            toast.success('✅ Scraping started! Jobs will appear in your dashboard shortly.', { duration: 5000 });
+                            
+                            // Get current count before scraping
+                            const initialCount = applications.length;
+                            
+                            // Start polling for new jobs
+                            let pollCount = 0;
+                            const maxPolls = 20; // Poll for up to 2 minutes (20 * 6 seconds)
+                            let lastKnownCount = initialCount;
+                            
+                            const pollInterval = setInterval(async () => {
+                              pollCount++;
+                              
+                              // Fetch fresh data
+                              await fetchData();
+                              
+                              // Check for new jobs in the next tick (after state updates)
+                              setTimeout(() => {
+                                // Get current count from fresh fetch
+                                applicationsAPI.getAll({ limit: 100 }).then((data: any) => {
+                                  const currentCount = (data.applications || []).length;
+                                  if (currentCount > lastKnownCount) {
+                                    const newJobs = currentCount - lastKnownCount;
+                                    toast.success(`🎉 Found ${newJobs} new job${newJobs > 1 ? 's' : ''}!`, { duration: 3000 });
+                                    lastKnownCount = currentCount;
+                                  }
+                                });
+                              }, 100);
+                              
+                              if (pollCount >= maxPolls) {
+                                clearInterval(pollInterval);
+                                setScrapeProgress('');
+                                setScraping(false);
+                                fetchData(); // Final refresh
+                                toast.success('✅ Scraping completed! Check your dashboard for new jobs.', { duration: 5000 });
+                              }
+                            }, 6000); // Poll every 6 seconds
+                            
+                            // Initial refresh after 10 seconds
+                            setTimeout(() => {
+                              fetchData();
+                            }, 10000);
+                            
+                          } catch (error: any) {
+                            toast.error(error.message || 'Failed to start scraping');
+                            setScraping(false);
+                            setScrapeProgress('');
+                          }
+                        }}
+                        disabled={scraping || scrapeSources.length === 0}
+                        whileHover={{ scale: scraping ? 1 : 1.02 }}
+                        whileTap={{ scale: scraping ? 1 : 0.98 }}
+                        className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-green-800 text-white rounded-lg font-semibold disabled:opacity-50"
+                      >
+                        {scraping ? 'Scraping...' : 'Start Scraping'}
+                      </motion.button>
+                      
+                      <motion.button
+                        onClick={() => {
+                          setShowScrapeModal(false);
+                          setScrapeProgress('');
+                        }}
+                        disabled={scraping}
+                        whileHover={{ scale: scraping ? 1 : 1.02 }}
+                        whileTap={{ scale: scraping ? 1 : 0.98 }}
+                        className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-semibold disabled:opacity-50"
+                      >
+                        Cancel
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Quick Start Info Banner */}
+          {applications.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6"
+            >
+              <div className="flex items-start gap-4">
+                <div className="text-4xl">🚀</div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Import Your LinkedIn Jobs in 3 Clicks!</h3>
+                  <div className="space-y-1 text-gray-700">
+                    <p><strong>1.</strong> Click the blue "Import from LinkedIn" button above</p>
+                    <p><strong>2.</strong> On LinkedIn, click the Chrome extension icon</p>
+                    <p><strong>3.</strong> Click "📥 Capture My Applied Jobs" and done! All jobs sync here automatically</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Time Range Selector */}
           <div className="flex gap-2">
@@ -384,6 +633,71 @@ export default function Dashboard() {
               }}
             />
           </motion.div>
+
+          {/* Time & Daily Stats Section */}
+          {stats.totalTimeSpent > 0 && (
+            <motion.div 
+              className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <GlassCard className="p-6" depth="medium">
+                <h3 className="text-2xl font-bold text-black mb-4">⏱️ Total Time Investment</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-black text-white rounded-xl">
+                    <span className="text-lg font-medium">Total Time Spent</span>
+                    <span className="text-3xl font-bold">{stats.totalTimeSpent} hours</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-600 mb-1">Average per App</div>
+                      <div className="text-xl font-bold text-black">{stats.averageTimePerApp} min</div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-600 mb-1">Total Applications</div>
+                      <div className="text-xl font-bold text-black">{stats.totalApplications}</div>
+                    </div>
+                  </div>
+                </div>
+              </GlassCard>
+
+              <GlassCard className="p-6" depth="medium">
+                <h3 className="text-2xl font-bold text-black mb-4">📅 Daily Application Counts</h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {Object.entries(stats.dailyCounts || {})
+                    .sort(([a], [b]) => b.localeCompare(a))
+                    .slice(0, 10)
+                    .map(([date, count]) => {
+                      const formattedDate = new Date(date).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: date !== new Date().toISOString().split('T')[0] ? 'numeric' : undefined
+                      });
+                      return (
+                        <motion.div
+                          key={date}
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                          whileHover={{ scale: 1.02, x: 5 }}
+                        >
+                          <span className="font-medium text-black">{formattedDate}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl font-bold text-black">{count}</span>
+                            <span className="text-sm text-gray-600">
+                              {count === 1 ? 'application' : 'applications'}
+                            </span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  {Object.keys(stats.dailyCounts || {}).length === 0 && (
+                    <div className="text-center text-gray-500 py-8">
+                      No daily data available yet
+                    </div>
+                  )}
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
 
           {/* Charts Section - 3D Glass Cards - ALL SAME HEIGHT */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" style={{ minHeight: '350px' }}>
@@ -485,65 +799,89 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" style={{ minHeight: '350px' }}>
             <GlassCard className="p-6 h-full" depth="medium">
               <h3 className="text-2xl font-bold text-black mb-4">Performance by Job Board</h3>
-              {sourcePerformance.length > 0 ? (
-                <div className="space-y-3 max-h-80 overflow-y-auto">
-                  {sourcePerformance.map((source, idx) => (
-                    <motion.div
-                      key={idx}
-                      className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200"
-                      whileHover={{ scale: 1.02, borderColor: '#000000' }}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.1 }}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-lg text-black">{source.source}</span>
-                        <span className="text-sm text-gray-600">{source.count} apps</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
-                        <div>
-                          <div className="text-xs text-gray-600 mb-1">Conversion Rate</div>
-                          <div className="text-lg font-semibold text-black">
-                            {source.conversionRate.toFixed(1)}%
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-600 mb-1">Avg Response Time</div>
-                          <div className="text-lg font-semibold text-black">
-                            {source.avgResponseTime > 0 ? source.avgResponseTime.toFixed(1) : 'N/A'} days
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ height: '250px' }}>
+              <div style={{ height: '300px' }}>
+                {sourcePerformance.length > 0 ? (
                   <Bar 
-                    data={sourceBarData}
+                    data={{
+                      labels: sourcePerformance.map(s => s.source),
+                      datasets: [
+                        {
+                          label: 'Applications',
+                          data: sourcePerformance.map(s => s.count),
+                          backgroundColor: sourcePerformance.map((_, i) => 
+                            ['#000000', '#333333', '#666666', '#999999', '#cccccc'][i % 5]
+                          ),
+                          borderRadius: 8,
+                        }
+                      ]
+                    }}
                     options={{
                       responsive: true,
                       maintainAspectRatio: false,
                       plugins: {
-                        legend: { display: false },
+                        legend: { 
+                          display: false
+                        },
                         tooltip: {
                           backgroundColor: 'rgba(0, 0, 0, 0.9)',
                           padding: 12,
+                          titleFont: { size: 14 },
+                          bodyFont: { size: 13 },
+                          borderColor: '#000000',
+                          borderWidth: 1,
+                          callbacks: {
+                            afterLabel: (context: any) => {
+                              const source = sourcePerformance[context.dataIndex];
+                              if (source) {
+                                return [
+                                  `Total: ${source.count} applications`,
+                                  `Conversion Rate: ${source.conversionRate.toFixed(1)}%`,
+                                  source.avgResponseTime > 0 
+                                    ? `Avg Response Time: ${source.avgResponseTime.toFixed(1)} days`
+                                    : 'Avg Response Time: N/A'
+                                ];
+                              }
+                              return [];
+                            }
+                          }
                         }
                       },
                       scales: {
                         y: {
                           beginAtZero: true,
-                          grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                          grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                          ticks: { 
+                            color: '#666666', 
+                            precision: 0,
+                            stepSize: 1
+                          }
                         },
                         x: {
-                          grid: { display: false }
+                          grid: { display: false },
+                          ticks: { 
+                            color: '#666666',
+                            maxRotation: 45,
+                            minRotation: 45
+                          }
                         }
                       }
                     }}
                   />
-                </div>
-              )}
+                ) : (
+                  <div style={{ 
+                    height: '250px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    color: '#666666'
+                  }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+                    <p style={{ fontSize: '16px', fontWeight: 'bold' }}>No job board data yet</p>
+                    <p style={{ fontSize: '14px', marginTop: '8px' }}>Apply to jobs to see performance metrics</p>
+                  </div>
+                )}
+              </div>
             </GlassCard>
 
             {/* Cold Email Metrics */}
