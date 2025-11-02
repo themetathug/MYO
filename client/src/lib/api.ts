@@ -159,7 +159,7 @@ export const analyticsAPI = {
   },
 };
 
-// Scraper APIs
+// Scraper APIs - DISABLED FOR MVP
 export const scraperAPI = {
   scrapeAll: async (params: {
     keywords?: string;
@@ -167,10 +167,8 @@ export const scraperAPI = {
     sources?: string[];
     limitPerSource?: number;
   }) => {
-    return fetchWithAuth('/api/scraper/scrape', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    });
+    console.warn('🚫 Scraping feature is disabled for MVP. Feature coming soon!');
+    throw new Error('Feature Coming Soon - Scraping is disabled for MVP');
   },
 
   scrapeSource: async (source: string, params: {
@@ -178,14 +176,13 @@ export const scraperAPI = {
     location?: string;
     limitPerSource?: number;
   }) => {
-    return fetchWithAuth(`/api/scraper/scrape/${source}`, {
-      method: 'POST',
-      body: JSON.stringify(params),
-    });
+    console.warn('🚫 Scraping feature is disabled for MVP. Feature coming soon!');
+    throw new Error('Feature Coming Soon - Scraping is disabled for MVP');
   },
 
   getStatus: async () => {
-    return fetchWithAuth('/api/scraper/scrape/status');
+    console.warn('🚫 Scraping feature is disabled for MVP. Feature coming soon!');
+    return { status: 'disabled', message: 'Feature Coming Soon' };
   },
 };
 

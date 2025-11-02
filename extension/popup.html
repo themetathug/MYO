@@ -12,44 +12,61 @@
     }
 
     body {
-      width: 380px;
-      min-height: 500px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(to bottom, #6366f1, #8b5cf6);
+      width: 400px;
+      min-height: 550px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
+      margin: 0;
+      padding: 0;
     }
 
     .container {
-      padding: 24px;
+      padding: 28px 24px;
     }
 
     .header {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.2);
     }
 
     .logo {
-      font-size: 32px;
-      margin-bottom: 8px;
+      font-size: 48px;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-6px); }
     }
 
     h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 4px;
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      letter-spacing: -0.5px;
     }
 
     .subtitle {
-      font-size: 14px;
-      opacity: 0.9;
+      font-size: 13px;
+      opacity: 0.95;
+      font-weight: 500;
+      letter-spacing: 0.3px;
     }
 
     .job-details {
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(255, 255, 255, 0.98);
       color: #1f2937;
-      border-radius: 12px;
-      padding: 20px;
+      border-radius: 16px;
+      padding: 24px;
       margin-bottom: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      backdrop-filter: blur(10px);
     }
 
     .form-group {
@@ -59,26 +76,40 @@
     label {
       display: block;
       font-size: 12px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: #6b7280;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #374151;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.8px;
+      font-family: inherit;
     }
 
     input, textarea {
       width: 100%;
-      padding: 10px 12px;
+      padding: 12px 14px;
       border: 2px solid #e5e7eb;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 14px;
       font-family: inherit;
-      transition: border-color 0.2s;
+      transition: all 0.3s;
+      background: #ffffff;
+      color: #1f2937;
+    }
+
+    input:hover, textarea:hover {
+      border-color: #d1d5db;
     }
 
     input:focus, textarea:focus {
       outline: none;
-      border-color: #6366f1;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      transform: translateY(-1px);
+    }
+
+    input::placeholder, textarea::placeholder {
+      color: #9ca3af;
+      font-weight: 400;
     }
 
     textarea {
@@ -90,16 +121,21 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px;
-      background: #f3f4f6;
-      border-radius: 8px;
+      padding: 16px;
+      background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+      border-radius: 12px;
       margin-bottom: 16px;
+      border: 2px solid #e5e7eb;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
     }
 
     .time-display {
-      font-size: 18px;
-      font-weight: 600;
-      color: #6366f1;
+      font-size: 24px;
+      font-weight: 700;
+      color: #667eea;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 1px;
+      text-shadow: 0 1px 2px rgba(102, 126, 234, 0.2);
     }
 
     .tracking-buttons {
@@ -108,67 +144,91 @@
     }
 
     button {
-      padding: 8px 16px;
+      padding: 10px 18px;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      letter-spacing: 0.3px;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none !important;
     }
 
     .btn-primary {
-      background: #6366f1;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
+      border: 2px solid rgba(255, 255, 255, 0.3);
     }
 
-    .btn-primary:hover {
-      background: #4f46e5;
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
     }
 
     .btn-secondary {
       background: white;
       color: #6366f1;
-      border: 2px solid #6366f1;
+      border: 2px solid #e5e7eb;
+      font-weight: 600;
     }
 
-    .btn-secondary:hover {
-      background: #f3f4f6;
+    .btn-secondary:hover:not(:disabled) {
+      background: #f9fafb;
+      border-color: #6366f1;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 10px rgba(99, 102, 241, 0.2);
     }
 
     .btn-success {
       width: 100%;
-      background: #10b981;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       color: white;
-      padding: 12px;
+      padding: 14px;
       font-size: 16px;
+      font-weight: 700;
+      border: none;
     }
 
-    .btn-success:hover {
-      background: #059669;
+    .btn-success:hover:not(:disabled) {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
     }
 
     .status {
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 12px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
       font-weight: 600;
       margin-bottom: 16px;
+      border: 2px solid transparent;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     }
 
     .status.success {
-      background: #d1fae5;
+      background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
       color: #065f46;
+      border-color: #10b981;
     }
 
     .status.error {
-      background: #fee2e2;
+      background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
       color: #991b1b;
+      border-color: #ef4444;
     }
 
     .status.info {
-      background: #dbeafe;
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
       color: #1e40af;
+      border-color: #3b82f6;
     }
 
     .hidden {
@@ -192,6 +252,32 @@
 
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    a {
+      color: #6366f1;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    a:hover {
+      color: #4f46e5;
+      text-decoration: underline;
+    }
+
+    #not-on-job-page {
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    #not-on-job-page .btn-success:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
     }
   </style>
 </head>
@@ -265,21 +351,26 @@
       </button>
     </div>
 
-    <div id="not-on-job-page" class="hidden" style="text-align: center; padding: 40px 20px;">
-      <div style="font-size: 48px; margin-bottom: 16px;">🔍</div>
-      <p style="font-size: 16px; margin-bottom: 8px;">Not on a job page</p>
-      <p style="font-size: 14px; opacity: 0.8; margin-bottom: 20px;">Visit a job posting on LinkedIn, Indeed, or other supported job boards to start tracking.</p>
-      <button class="btn-primary" id="sync-token-btn" style="width: 100%; margin-top: 12px;">
-        🔄 Sync Auth Token
-      </button>
-      <p style="font-size: 11px; opacity: 0.7; margin-top: 8px;">Click this if you see "No auth token" warning</p>
+    <div id="not-on-job-page" class="job-details hidden" style="text-align: center; padding: 32px 20px; background: rgba(255, 255, 255, 0.98); color: #1f2937;">
+      <div style="font-size: 56px; margin-bottom: 20px; animation: pulse 2s ease-in-out infinite;">📋</div>
+      <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 12px; color: #111827;">Bulk Import from LinkedIn</h2>
+      <p style="font-size: 14px; color: #6b7280; margin-bottom: 24px; line-height: 1.6;">
+        Import all your applied jobs from LinkedIn in one click!
+      </p>
       
-      <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.2);">
-        <p style="font-size: 14px; margin-bottom: 12px; text-align: center;">📋 Bulk Import</p>
-        <button class="btn-success" id="capture-my-jobs-btn" style="width: 100%;">
-          📥 Capture My Applied Jobs
+      <button class="btn-success" id="capture-my-jobs-btn" style="width: 100%; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 10px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transition: all 0.3s;">
+        📥 Capture My Applied Jobs
+      </button>
+      <p style="font-size: 12px; color: #9ca3af; margin-top: 12px; line-height: 1.5;">
+        <strong>Step 1:</strong> Go to <a href="https://www.linkedin.com/my-items/saved-jobs/?cardType=APPLIED" target="_blank" style="color: #6366f1; text-decoration: underline;">LinkedIn My Jobs → Applied</a><br>
+        <strong>Step 2:</strong> Click the button above to import all jobs
+      </p>
+      
+      <div style="margin-top: 28px; padding-top: 24px; border-top: 2px solid #e5e7eb;">
+        <button class="btn-primary" id="sync-token-btn" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600;">
+          🔄 Sync Auth Token
         </button>
-        <p style="font-size: 11px; opacity: 0.7; margin-top: 8px; text-align: center;">Go to LinkedIn "My Jobs → Applied" first, then click this button to import all your applied jobs at once!</p>
+        <p style="font-size: 11px; color: #9ca3af; margin-top: 8px;">Click if you see "No auth token" warning</p>
       </div>
     </div>
   </div>

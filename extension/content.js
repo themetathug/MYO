@@ -115,20 +115,20 @@ class JobCapture {
       switch(request.action) {
         case 'captureJob':
           this.captureCurrentJob().then(sendResponse);
-          return true;
-        
+        return true;
+
         case 'captureMyJobs':
           this.captureLinkedInMyJobs().then(sendResponse);
-          return true;
-          
+        return true;
+
         case 'getToken':
-          try {
-            const token = localStorage.getItem('token');
-            sendResponse({ token: token || null });
-          } catch (e) {
-            sendResponse({ token: null });
-          }
-          return true;
+        try {
+          const token = localStorage.getItem('token');
+          sendResponse({ token: token || null });
+        } catch (e) {
+          sendResponse({ token: null });
+        }
+        return true;
 
         case 'fetchAppliedJobs':
           this.fetchAppliedJobs().then(sendResponse);
@@ -139,15 +139,15 @@ class JobCapture {
           return true;
 
         case 'startTracking':
-          this.startTimeTracking();
-          sendResponse({ success: true });
+        this.startTimeTracking();
+        sendResponse({ success: true });
           return true;
 
         case 'stopTracking':
-          const timeSpent = this.stopTimeTracking();
-          sendResponse({ timeSpent });
+        const timeSpent = this.stopTimeTracking();
+        sendResponse({ timeSpent });
           return true;
-          
+
         default:
           sendResponse({ success: false, error: 'Unknown action' });
       }
@@ -194,8 +194,8 @@ class JobCapture {
   // LinkedIn-specific job capture for "My Jobs" applied section
   async captureLinkedInMyJobs() {
     console.log('🔍 UK Job Tracker: Starting LinkedIn My Jobs capture...');
-    console.log('📍 Current URL:', window.location.href);
-    
+      console.log('📍 Current URL:', window.location.href);
+      
     try {
       // Check if on correct page
       const url = window.location.href;
@@ -281,11 +281,11 @@ class JobCapture {
               seenUrls.add(jobUrl);
             
             // Walk up DOM to find the card container (up to 15 levels)
-            let container = link;
+          let container = link;
             let bestContainer = link.parentElement;
             
             for (let i = 0; i < 15; i++) {
-              container = container?.parentElement;
+            container = container?.parentElement;
               if (!container || container === document.body) break;
               
               if (container.tagName === 'LI' || 
@@ -505,17 +505,21 @@ class JobCapture {
             const jobUrl = linkElement?.href;
             
             if (position && company) {
-              // Ensure jobUrl is valid URL format
-              let validJobUrl = jobUrl ? jobUrl.split('?')[0] : window.location.href;
-              if (!validJobUrl.startsWith('http://') && !validJobUrl.startsWith('https://')) {
+              // Normalize jobUrl - remove query params and ensure proper format for duplicate checking
+              let validJobUrl = jobUrl ? jobUrl.split('?')[0].trim() : window.location.href.split('?')[0].trim();
+              if (validJobUrl && !validJobUrl.startsWith('http://') && !validJobUrl.startsWith('https://')) {
                 validJobUrl = `https://${validJobUrl.replace(/^\/+/, '')}`;
+              }
+              // Remove trailing slash for consistency
+              if (validJobUrl) {
+                validJobUrl = validJobUrl.replace(/\/+$/, '');
               }
               
               const jobData = {
-                position: position.substring(0, 255),
-                company: company.replace(/^at\s+/, '').substring(0, 255), // Remove "at " prefix
-                location: location && location !== 'Not specified' ? location.substring(0, 255) : undefined,
-                jobUrl: validJobUrl,
+                position: position.trim().substring(0, 255),
+                company: company.replace(/^at\s+/, '').trim().substring(0, 255), // Remove "at " prefix and trim
+                location: location && location !== 'Not specified' ? location.trim().substring(0, 255) : undefined,
+                jobUrl: validJobUrl || undefined,
                 jobBoardSource: 'LinkedIn',
                 status: this.parseApplicationStatus(appliedText),
                 captureMethod: 'EXTENSION'
@@ -580,14 +584,14 @@ class JobCapture {
               // Look for company name near the link
               const siblings = Array.from(card.children || []);
               for (const sibling of siblings) {
-                const text = sibling.textContent?.trim();
+              const text = sibling.textContent?.trim();
                 if (text && text.length > 2 && text.length < 100 && text !== titleElement?.textContent?.trim()) {
                   companyElement = sibling;
-                  break;
-                }
+                break;
               }
             }
-            
+          }
+          
             const position = titleElement?.textContent?.trim() || 
                            linkElement?.textContent?.trim() || 
                            linkElement?.getAttribute('aria-label') || '';
@@ -596,17 +600,21 @@ class JobCapture {
             const jobUrl = linkElement?.href;
             
             if (position && company && jobUrl) {
-              // Ensure jobUrl is valid URL format
-              let validJobUrl = jobUrl.split('?')[0];
-              if (!validJobUrl.startsWith('http://') && !validJobUrl.startsWith('https://')) {
+              // Normalize jobUrl - remove query params and ensure proper format for duplicate checking
+              let validJobUrl = jobUrl.split('?')[0].trim();
+              if (validJobUrl && !validJobUrl.startsWith('http://') && !validJobUrl.startsWith('https://')) {
                 validJobUrl = `https://${validJobUrl.replace(/^\/+/, '')}`;
+              }
+              // Remove trailing slash for consistency
+              if (validJobUrl) {
+                validJobUrl = validJobUrl.replace(/\/+$/, '');
               }
               
               const jobData = {
-                position: position.substring(0, 255),
-                company: company.substring(0, 255),
-                location: location && location !== 'Not specified' ? location.substring(0, 255) : undefined,
-                jobUrl: validJobUrl,
+                position: position.trim().substring(0, 255),
+                company: company.trim().substring(0, 255),
+                location: location && location !== 'Not specified' ? location.trim().substring(0, 255) : undefined,
+                jobUrl: validJobUrl || undefined,
                 jobBoardSource: 'LinkedIn',
                 status: 'APPLIED',
                 captureMethod: 'EXTENSION'
@@ -714,8 +722,8 @@ class JobCapture {
       
       const currentHeight = document.body.scrollHeight;
       if (currentHeight === previousHeight) {
-        break;
-      }
+                break;
+              }
       previousHeight = currentHeight;
       scrollAttempts++;
     }
@@ -840,6 +848,7 @@ class JobCapture {
       console.log(`📤 Sending ${jobs.length} jobs to backend...`);
       
       let successCount = 0;
+      let duplicateCount = 0;
       let failCount = 0;
       
       const failedJobsDetails = [];
@@ -847,7 +856,7 @@ class JobCapture {
       for (const job of jobs) {
         try {
           // Log what we're sending (first job only, to avoid spam)
-          if (successCount + failCount === 0) {
+          if (successCount + duplicateCount + failCount === 0) {
             console.log('📤 Sample job data being sent:', {
               position: job.position,
               company: job.company,
@@ -869,10 +878,16 @@ class JobCapture {
           });
           
           if (response.ok) {
-            successCount++;
             const result = await response.json().catch(() => ({}));
-            if (successCount === 1) {
-              console.log('✅ First job saved successfully:', result);
+            if (result.duplicate) {
+              // Duplicate detected and skipped - log it
+              duplicateCount++;
+              console.log(`⚠️ Duplicate skipped: ${job.position} at ${job.company}`);
+            } else {
+            successCount++;
+              if (successCount === 1) {
+                console.log('✅ First job saved successfully:', result);
+              }
             }
           } else {
             failCount++;
@@ -930,7 +945,7 @@ class JobCapture {
         }
       }
       
-      console.log(`✅ Bulk import complete: ${successCount} successful, ${failCount} failed`);
+      console.log(`✅ Bulk import complete: ${successCount} new, ${duplicateCount} duplicates, ${failCount} failed`);
       
       if (failCount > 0) {
         // Show detailed failure summary
@@ -949,10 +964,15 @@ class JobCapture {
         console.error(`\n==========================================\n`);
         
         const errorMsg = `${failCount} jobs failed to import. See detailed errors above.`;
-        this.showNotification(`⚠️ Imported ${successCount} jobs, but ${failCount} failed. Check console (F12) for details.`, 'error');
+        const message = `⚠️ Imported ${successCount} new jobs${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ''}, but ${failCount} failed. Check console (F12) for details.`;
+        this.showNotification(message, 'error');
         throw new Error(errorMsg);
       } else {
-        this.showNotification(`✅ Successfully imported ${successCount} jobs to dashboard!`, 'success');
+        let message = `✅ Successfully imported ${successCount} new job${successCount !== 1 ? 's' : ''} to dashboard!`;
+        if (duplicateCount > 0) {
+          message += ` (${duplicateCount} duplicate${duplicateCount !== 1 ? 's' : ''} skipped)`;
+        }
+        this.showNotification(message, 'success');
       }
     } catch (error) {
       console.error('❌ Bulk backend save error:', error);
@@ -989,12 +1009,12 @@ class JobCapture {
       console.log('🔍 UK Job Tracker: Starting job capture...', currentUrl);
       const hostname = window.location.hostname;
       const selectors = this.getSelectorsForSite(hostname);
-      
+
       if (!selectors) {
         console.warn('⚠️ No specific selectors found, using generic capture');
         return this.genericCapture();
       }
-      
+
       console.log('✅ Found selectors for:', hostname);
       
       // Use silent mode to suppress error messages for selectors
@@ -1012,7 +1032,7 @@ class JobCapture {
           salary: salary || '(not found)'
         });
       }
-      
+
       const jobDetails = {
         company: company || '',
         position: position || '',
@@ -1023,7 +1043,7 @@ class JobCapture {
         captureMethod: 'EXTENSION',
         timestamp: new Date().toISOString()
       };
-      
+
       // Validate captured data
       if (!jobDetails.company || !jobDetails.position) {
         // If on "My Jobs" page, don't try fallback - just return silently
@@ -1037,19 +1057,19 @@ class JobCapture {
         console.warn('⚠️ Missing critical data, trying fallback capture...');
         return this.fallbackCapture(jobDetails);
       }
-      
+
       this.currentJob = jobDetails;
-      
+
       // Show success notification
       this.showNotification('✅ Job details captured successfully!', 'success');
-      
+
       // Send to backend
       this.sendToBackend(jobDetails).catch(err => {
         console.warn('⚠️ Backend save failed (will sync later):', err);
       });
-      
+
       return { success: true, data: jobDetails };
-      
+
     } catch (error) {
       console.error('❌ Error capturing job:', error);
       this.showNotification(`❌ Error: ${error.message}`, 'error');
@@ -1172,18 +1192,18 @@ class JobCapture {
         this.showNotification('❌ No auth token found. Please login and sync token.', 'error');
         return { success: false, error: 'No auth token found' };
       }
-      
+
       const response = await fetch('http://localhost:3001/api/applications', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-      
+
       if (!response.ok) {
         return { success: false, error: `Backend returned ${response.status}` };
       }
-      
+
       const jobs = await response.json();
       return { success: true, data: jobs };
     } catch (error) {
@@ -1194,23 +1214,23 @@ class JobCapture {
   }
 
   // Show notification
-  showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
+      showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
     notification.className = `uk-jobs-notification uk-jobs-notification-${type}`;
-    notification.textContent = message;
+        notification.textContent = message;
     
-    const bgColor = type === 'success' ? '#10b981' : 
-                    type === 'error' ? '#ef4444' : 
+        const bgColor = type === 'success' ? '#10b981' : 
+                        type === 'error' ? '#ef4444' : 
                     '#3b82f6';
     
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
+        notification.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
       padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
       z-index: 10000;
       animation: slideIn 0.3s ease;
       max-width: 300px;
@@ -1218,10 +1238,10 @@ class JobCapture {
       background: ${bgColor};
       color: white;
       font-family: system-ui, -apple-system, sans-serif;
-    `;
-    
+        `;
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
       notification.style.animation = 'slideOut 0.3s ease';
       setTimeout(() => notification.remove(), 300);

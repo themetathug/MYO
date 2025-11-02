@@ -20,7 +20,7 @@ import { CustomCursor } from '../../components/CustomCursor';
 import { ParticleBackground } from '../../components/ParticleBackground';
 import { GlassCard } from '../../components/GlassCard';
 import { FlipCard } from '../../components/FlipCard';
-import { applicationsAPI, scraperAPI } from '../../lib/api';
+import { applicationsAPI } from '../../lib/api';
 
 ChartJS.register(
   CategoryScale,
@@ -38,11 +38,6 @@ export default function Dashboard() {
   const [timeRange, setTimeRange] = useState('30');
   const [loading, setLoading] = useState(true);
   const [applications, setApplications] = useState<any[]>([]);
-  const [scraping, setScraping] = useState(false);
-  const [showScrapeModal, setShowScrapeModal] = useState(false);
-  const [scrapeProgress, setScrapeProgress] = useState<string>('');
-  const [scrapeSources, setScrapeSources] = useState<string[]>(['indeed', 'monster']);
-  const [scrapeLimit, setScrapeLimit] = useState(10);
   const [stats, setStats] = useState({
     totalApplications: 0,
     weeklyApplications: 0,
@@ -312,25 +307,37 @@ export default function Dashboard() {
               
               {/* Scraping Buttons */}
               <div className="flex items-center gap-3">
-                <motion.button
-                  onClick={() => setShowScrapeModal(true)}
-                  disabled={scraping}
-                  whileHover={{ scale: scraping ? 1 : 1.05 }}
-                  whileTap={{ scale: scraping ? 1 : 0.95 }}
-                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                <div
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.nativeEvent.stopImmediatePropagation();
+                    toast.success('🚀 Feature Coming Soon!', {
+                      duration: 4000,
+                      icon: '⏳',
+                      style: {
+                        background: 'linear-gradient(to right, #10b981, #059669)',
+                        color: 'white',
+                        fontWeight: 'bold',
+                      },
+                    });
+                    return false;
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onMouseUp={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-gray-400 to-gray-600 text-white rounded-lg font-semibold shadow-lg transition-all flex items-center gap-2 cursor-not-allowed opacity-75 select-none pointer-events-auto"
+                  title="Feature Coming Soon - Click for details"
+                  style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
                 >
-                  {scraping ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Scraping...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xl">🔍</span>
-                      <span>Scrape Jobs</span>
-                    </>
-                  )}
-                </motion.button>
+                  <span className="text-xl">🔍</span>
+                  <span>Scrape Jobs (Coming Soon)</span>
+                </div>
                 
                 <motion.button
                   onClick={() => {
@@ -345,176 +352,6 @@ export default function Dashboard() {
                   Import from LinkedIn
                 </motion.button>
               </div>
-
-              {/* Scraping Modal */}
-              {showScrapeModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 max-w-lg w-full"
-                  >
-                    <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">🔍 Scrape Jobs</h2>
-                    
-                    {scrapeProgress && (
-                      <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                        <p className="text-sm text-blue-700 dark:text-blue-300">{scrapeProgress}</p>
-                      </div>
-                    )}
-
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-4">
-                        <p className="text-sm text-blue-700 dark:text-blue-300">
-                          <strong>📋 How to import your LinkedIn Applied Jobs:</strong>
-                          <br />
-                          1. Open the browser extension popup
-                          <br />
-                          2. Navigate to: <code className="text-xs">linkedin.com/my-items/saved-jobs/?cardType=APPLIED</code>
-                          <br />
-                          3. Click "Capture My Applied Jobs" button
-                          <br />
-                          <br />
-                          This will import ALL your applied jobs from LinkedIn automatically!
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                          Job Boards (for general job search)
-                        </label>
-                        <div className="space-y-2">
-                          {['indeed', 'monster'].map((source) => (
-                            <label key={source} className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={scrapeSources.includes(source)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setScrapeSources([...scrapeSources, source]);
-                                  } else {
-                                    setScrapeSources(scrapeSources.filter(s => s !== source));
-                                  }
-                                }}
-                                disabled={scraping}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-gray-700 dark:text-gray-300 capitalize">{source}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">Note: LinkedIn jobs should be imported via extension</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                          Jobs per Source (5-25)
-                        </label>
-                        <input
-                          type="number"
-                          value={scrapeLimit}
-                          onChange={(e) => setScrapeLimit(Math.min(25, Math.max(5, parseInt(e.target.value) || 10)))}
-                          min="5"
-                          max="25"
-                          className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:text-white"
-                          disabled={scraping}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3 mt-6">
-                      <motion.button
-                        onClick={async () => {
-                          if (scrapeSources.length === 0) {
-                            toast.error('Please select at least one job board');
-                            return;
-                          }
-                          
-                          setScraping(true);
-                          setScrapeProgress('🚀 Starting job scraping...');
-                          setShowScrapeModal(false);
-                          
-                          try {
-                            // For MVP: Use default search terms, user can customize later
-                            const result = await scraperAPI.scrapeAll({
-                              keywords: 'developer', // Default for MVP
-                              location: 'United Kingdom', // Default for MVP
-                              sources: scrapeSources.length > 0 ? scrapeSources : ['indeed', 'monster'],
-                              limitPerSource: scrapeLimit || 10,
-                            });
-                            
-                            toast.success('✅ Scraping started! Jobs will appear in your dashboard shortly.', { duration: 5000 });
-                            
-                            // Get current count before scraping
-                            const initialCount = applications.length;
-                            
-                            // Start polling for new jobs
-                            let pollCount = 0;
-                            const maxPolls = 20; // Poll for up to 2 minutes (20 * 6 seconds)
-                            let lastKnownCount = initialCount;
-                            
-                            const pollInterval = setInterval(async () => {
-                              pollCount++;
-                              
-                              // Fetch fresh data
-                              await fetchData();
-                              
-                              // Check for new jobs in the next tick (after state updates)
-                              setTimeout(() => {
-                                // Get current count from fresh fetch
-                                applicationsAPI.getAll({ limit: 100 }).then((data: any) => {
-                                  const currentCount = (data.applications || []).length;
-                                  if (currentCount > lastKnownCount) {
-                                    const newJobs = currentCount - lastKnownCount;
-                                    toast.success(`🎉 Found ${newJobs} new job${newJobs > 1 ? 's' : ''}!`, { duration: 3000 });
-                                    lastKnownCount = currentCount;
-                                  }
-                                });
-                              }, 100);
-                              
-                              if (pollCount >= maxPolls) {
-                                clearInterval(pollInterval);
-                                setScrapeProgress('');
-                                setScraping(false);
-                                fetchData(); // Final refresh
-                                toast.success('✅ Scraping completed! Check your dashboard for new jobs.', { duration: 5000 });
-                              }
-                            }, 6000); // Poll every 6 seconds
-                            
-                            // Initial refresh after 10 seconds
-                            setTimeout(() => {
-                              fetchData();
-                            }, 10000);
-                            
-                          } catch (error: any) {
-                            toast.error(error.message || 'Failed to start scraping');
-                            setScraping(false);
-                            setScrapeProgress('');
-                          }
-                        }}
-                        disabled={scraping || scrapeSources.length === 0}
-                        whileHover={{ scale: scraping ? 1 : 1.02 }}
-                        whileTap={{ scale: scraping ? 1 : 0.98 }}
-                        className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-green-800 text-white rounded-lg font-semibold disabled:opacity-50"
-                      >
-                        {scraping ? 'Scraping...' : 'Start Scraping'}
-                      </motion.button>
-                      
-                      <motion.button
-                        onClick={() => {
-                          setShowScrapeModal(false);
-                          setScrapeProgress('');
-                        }}
-                        disabled={scraping}
-                        whileHover={{ scale: scraping ? 1 : 1.02 }}
-                        whileTap={{ scale: scraping ? 1 : 0.98 }}
-                        className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-semibold disabled:opacity-50"
-                      >
-                        Cancel
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -578,7 +415,23 @@ export default function Dashboard() {
               value={stats.totalApplications}
               subtitle={`${stats.weeklyApplications} this week`}
               icon="📊"
-              trend={stats.lastWeekApplications > 0 ? Math.round(((stats.weeklyApplications - stats.lastWeekApplications) / stats.lastWeekApplications) * 100) : 0}
+              trend={(() => {
+                // Calculate week-over-week percentage change
+                const thisWeek = stats.weeklyApplications || 0;
+                const lastWeek = stats.lastWeekApplications || 0;
+                
+                if (lastWeek === 0) {
+                  // If last week was 0, show percentage based on current week
+                  if (thisWeek > 0) {
+                    return 100; // New applications = 100% increase
+                  }
+                  return 0; // No change if both are 0
+                }
+                
+                // Calculate percentage change
+                const percentageChange = ((thisWeek - lastWeek) / lastWeek) * 100;
+                return Math.round(percentageChange);
+              })()}
               trendPositive={stats.weeklyApplications >= stats.lastWeekApplications}
               detailedStats={{
                 thisWeek: stats.weeklyApplications,
@@ -593,8 +446,43 @@ export default function Dashboard() {
               value={`${stats.averageTimePerApp}m`}
               subtitle="Efficiency metric"
               icon="⏱️"
-              trend={Math.abs(stats.improvement)}
-              trendPositive={stats.improvement > 0}
+              trend={(() => {
+                // Calculate improvement percentage
+                const avgTime = stats.averageTimePerApp || 0;
+                const targetTime = stats.targetTime || 20;
+                const improvement = stats.improvement || 0;
+                
+                // If we have improvement data from backend (period-over-period comparison)
+                if (improvement !== 0 && !isNaN(improvement)) {
+                  return Math.round(Math.abs(improvement));
+                }
+                
+                // Otherwise, calculate based on target time
+                if (avgTime > 0 && targetTime > 0) {
+                  // Calculate how close we are to target (as percentage)
+                  if (avgTime <= targetTime) {
+                    // We're at or below target (good!) - show percentage under target
+                    const underTarget = ((targetTime - avgTime) / targetTime) * 100;
+                    return Math.round(Math.max(0, underTarget));
+                  } else {
+                    // We're over target - show percentage over target (negative, but display as positive)
+                    const overTarget = ((avgTime - targetTime) / targetTime) * 100;
+                    return Math.round(overTarget);
+                  }
+                }
+                
+                return 0; // No data available
+              })()}
+              trendPositive={(() => {
+                // Positive if improving (lower time) or meeting target
+                const avgTime = stats.averageTimePerApp || 0;
+                const targetTime = stats.targetTime || 20;
+                const improvement = stats.improvement || 0;
+                
+                if (improvement > 0) return true; // Time decreased = improvement
+                if (avgTime > 0 && avgTime <= targetTime) return true; // Meeting target
+                return false;
+              })()}
               detailedStats={{
                 fastest: stats.fastestTime > 0 ? `${stats.fastestTime}m` : 'N/A',
                 slowest: stats.slowestTime > 0 ? `${stats.slowestTime}m` : 'N/A',

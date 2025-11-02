@@ -149,36 +149,84 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
       
-      loading.classList.remove('hidden');
+      const url = tab.url || '';
       
-      // Request job data from content script
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'captureJob' });
-      
-      loading.classList.add('hidden');
-      
-      if (response && response.success && response.data) {
-        currentJob = response.data;
-        populateForm(response.data);
-        jobForm.classList.remove('hidden');
-        
-        // Update source if not provided
-        if (!sourceInput.value && tab.url) {
-          sourceInput.value = getSourceFromUrl(tab.url);
-        }
-        
-        if (!urlInput.value) {
-          urlInput.value = tab.url;
-        }
-      } else {
-        // Not on a job page
+      // Check if on LinkedIn "My Jobs" page - show bulk import option
+      if (url.includes('linkedin.com/my-items/saved-jobs') || url.includes('linkedin.com/my-items')) {
         notOnJobPage.classList.remove('hidden');
+        return;
       }
+      
+      // Check if on a known job board - try to capture
+      const isJobBoard = url.includes('linkedin.com/jobs') || 
+                        url.includes('indeed.com') || 
+                        url.includes('reed.co.uk') ||
+                        url.includes('totaljobs.com') ||
+                        url.includes('monster.com') ||
+                        url.includes('cv-library') ||
+                        url.includes('glassdoor');
+      
+      if (isJobBoard) {
+        loading.classList.remove('hidden');
+        
+        try {
+          // Request job data from content script
+          const response = await chrome.tabs.sendMessage(tab.id, { action: 'captureJob' });
+          
+          loading.classList.add('hidden');
+          
+          if (response && response.success && response.data) {
+            currentJob = response.data;
+            populateForm(response.data);
+            jobForm.classList.remove('hidden');
+            
+            // Update source if not provided
+            if (!sourceInput.value && tab.url) {
+              sourceInput.value = getSourceFromUrl(tab.url);
+            }
+            
+            if (!urlInput.value) {
+              urlInput.value = tab.url;
+            }
+            return;
+          }
+        } catch (msgError) {
+          // Content script might not be loaded - show form anyway
+          console.log('Content script not ready, showing manual form');
+          loading.classList.add('hidden');
+          jobForm.classList.remove('hidden');
+          
+          if (tab.url) {
+            sourceInput.value = getSourceFromUrl(tab.url);
+            urlInput.value = tab.url;
+          }
+          return;
+        }
+      }
+      
+      // Show manual form by default (user can always fill it manually)
+      jobForm.classList.remove('hidden');
+      
+      if (tab.url) {
+        sourceInput.value = getSourceFromUrl(tab.url);
+        urlInput.value = tab.url;
+        
+        // Pre-fill company/position from URL if possible
+        if (url.includes('linkedin.com/jobs/view')) {
+          // Try to extract from URL
+          const urlParts = url.split('/');
+          const jobIndex = urlParts.findIndex(p => p === 'view');
+          if (jobIndex !== -1 && urlParts[jobIndex + 1]) {
+            // Could parse more from URL if needed
+          }
+        }
+      }
+      
     } catch (error) {
       console.error('Error initializing popup:', error);
       loading.classList.add('hidden');
       // Show manual form as fallback
       jobForm.classList.remove('hidden');
-      notOnJobPage.classList.remove('hidden');
     }
   }
   

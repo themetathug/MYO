@@ -125,6 +125,54 @@ router.post('/', validateRequest(createApplicationSchema), async (req, res) => {
       captureMethod = 'MANUAL',
     } = req.body;
 
+    // Check for duplicates: same user, company, position
+    // Priority 1: Check by jobUrl (most reliable - exact match or normalized)
+    let duplicateCheck = { rows: [] };
+    if (jobUrl) {
+      // Normalize URL - remove query params and trailing slashes for comparison
+      const normalizedUrl = jobUrl.split('?')[0].replace(/\/+$/, '').toLowerCase();
+      
+      // Check for exact match first
+      duplicateCheck = await pool.query(
+        `SELECT id FROM applications 
+         WHERE user_id = $1 AND job_url = $2`,
+        [userId, jobUrl]
+      );
+      
+      // If no exact match, check normalized version (removing query params)
+      // Use SPLIT_PART to get URL without query params, then trim trailing slashes
+      if (duplicateCheck.rows.length === 0) {
+        duplicateCheck = await pool.query(
+          `SELECT id FROM applications 
+           WHERE user_id = $1 
+           AND job_url IS NOT NULL
+           AND LOWER(RTRIM(SPLIT_PART(job_url, '?', 1), '/')) = $2`,
+          [userId, normalizedUrl]
+        );
+      }
+    }
+    
+    // Priority 2: Check by company + position (case-insensitive, trimmed, within 90 days)
+    if (duplicateCheck.rows.length === 0) {
+      duplicateCheck = await pool.query(
+        `SELECT id FROM applications 
+         WHERE user_id = $1 
+         AND LOWER(TRIM(company)) = LOWER(TRIM($2))
+         AND LOWER(TRIM(position)) = LOWER(TRIM($3))
+         AND applied_at >= NOW() - INTERVAL '90 days'`,
+        [userId, company.trim(), position.trim()]
+      );
+    }
+
+    if (duplicateCheck.rows.length > 0) {
+      logger.info(`Duplicate application skipped: ${company} - ${position} for user ${userId}`);
+      return res.status(200).json({
+        message: 'Application already exists (duplicate skipped)',
+        application: duplicateCheck.rows[0],
+        duplicate: true,
+      });
+    }
+
     const result = await pool.query(
       `INSERT INTO applications 
        (user_id, company, position, location, job_board_source, job_url, salary, status, notes, time_spent, capture_method, applied_at, created_at, updated_at)
