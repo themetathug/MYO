@@ -436,7 +436,28 @@ router.get('/stats/summary', async (req, res) => {
     });
     const responseRate = total > 0 ? Math.round((appsWithResponse.length / total) * 100 * 100) / 100 : 0;
     
-    logger.info(`Response stats for user ${userId}: total=${total}, responses=${appsWithResponse.length}, rate=${responseRate}%`);
+    // Calculate previous period response rate (for trend comparison)
+    const previousPeriodEnd = new Date(startDate);
+    const previousPeriodStart = new Date(startDate);
+    previousPeriodStart.setDate(previousPeriodStart.getDate() - days);
+    
+    const previousPeriodApps = allApps.filter((app: any) => {
+      const appDate = new Date(app.applied_at || app.created_at);
+      return appDate >= previousPeriodStart && appDate < previousPeriodEnd;
+    });
+    
+    const previousAppsWithResponse = previousPeriodApps.filter((app: any) => {
+      if (app.response_date != null) return true;
+      const progressedStatuses = ['VIEWED', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'INTERVIEWED', 'OFFERED', 'ACCEPTED'];
+      if (progressedStatuses.includes(app.status)) return true;
+      return false;
+    });
+    
+    const previousResponseRate = previousPeriodApps.length > 0 
+      ? Math.round((previousAppsWithResponse.length / previousPeriodApps.length) * 100 * 100) / 100 
+      : 0;
+    
+    logger.info(`Response stats for user ${userId}: total=${total}, responses=${appsWithResponse.length}, rate=${responseRate}%, previousRate=${previousResponseRate}%`);
 
     // Calculate average response time (in days)
     const responseTimes: number[] = [];
@@ -457,6 +478,14 @@ router.get('/stats/summary', async (req, res) => {
     // Calculate streaks
     const applicationDates = allApps.map((app: any) => new Date(app.applied_at || app.created_at));
     const { current: currentStreak, longest: longestStreak } = calculateStreaks(applicationDates);
+    
+    // Calculate previous streak (for trend - get streak from 7 days ago)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const previousApplicationDates = allApps
+      .filter((app: any) => new Date(app.applied_at || app.created_at) <= sevenDaysAgo)
+      .map((app: any) => new Date(app.applied_at || app.created_at));
+    const { current: previousStreak } = calculateStreaks(previousApplicationDates);
 
     // Get weekly applications
     const weekAgo = new Date();
@@ -621,9 +650,11 @@ router.get('/stats/summary', async (req, res) => {
       targetTime,
       improvement,
       responseRate,
+      previousResponseRate,
       responsesReceived: appsWithResponse.length,
       averageResponseTime,
       currentStreak,
+      previousStreak,
       longestStreak,
       weeklyGoal,
       weeklyAchievement,

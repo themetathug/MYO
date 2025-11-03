@@ -69,7 +69,7 @@ export function GlassCard({ children, className = '', depth = 'medium' }: GlassC
         stiffness: 300,
         damping: 20
       }}
-      className={`backdrop-blur-xl bg-white/80 border-2 border-gray-200 rounded-2xl ${depthStyles[depth]} hover:shadow-[0_30px_80px_rgba(0,0,0,0.25)] transition-all duration-300 ${className}`}
+      className={`backdrop-blur-xl bg-white/80 dark:bg-gray-800/80 border-2 border-gray-200 dark:border-gray-700 rounded-2xl ${depthStyles[depth]} hover:shadow-[0_30px_80px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_30px_80px_rgba(255,255,255,0.1)] transition-all duration-300 ${className}`}
     >
       <div style={{ transform: 'translateZ(50px)' }}>
         {children}

@@ -39,6 +39,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [applications, setApplications] = useState<any[]>([]);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [userInfo, setUserInfo] = useState({ email: '', firstName: '', lastName: '' });
+  const [activeMenuItem, setActiveMenuItem] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [stats, setStats] = useState({
     totalApplications: 0,
     weeklyApplications: 0,
@@ -54,8 +58,10 @@ export default function Dashboard() {
     targetTime: 20,
     improvement: 0,
     responseRate: 0,
+    previousResponseRate: 0,
     responsesReceived: 0,
     currentStreak: 0,
+    previousStreak: 0,
     longestStreak: 0,
     weeklyGoal: 15,
     weeklyAchievement: 0,
@@ -156,8 +162,10 @@ export default function Dashboard() {
           targetTime: statsData.targetTime || 20,
           improvement: statsData.improvement || 0,
           responseRate: Math.round(statsData.responseRate || 0),
+          previousResponseRate: Math.round(statsData.previousResponseRate || 0),
           responsesReceived: statsData.responsesReceived || 0,
           currentStreak: statsData.currentStreak || 0,
+          previousStreak: statsData.previousStreak || 0,
           longestStreak: statsData.longestStreak || 0,
           weeklyGoal: statsData.weeklyGoal || 15,
           weeklyAchievement: Math.round(statsData.weeklyAchievement || 0),
@@ -198,6 +206,90 @@ export default function Dashboard() {
     fetchData();
   }, [timeRange]);
 
+  // Fetch user info from token
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          // Try to decode JWT token
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          console.log('🔍 Token payload:', payload); // Debug log
+          
+          // Try multiple possible field names for email
+          const email = payload.email || payload.username || payload.userEmail || payload.user?.email || payload.sub || '';
+          
+          // If email exists in token, use it
+          if (email) {
+            console.log('✅ Found email in token:', email); // Debug log
+            const firstName = payload.firstName || payload.first_name || payload.name?.split(' ')[0] || email.split('@')[0] || 'User';
+            const lastName = payload.lastName || payload.last_name || payload.name?.split(' ').slice(1).join(' ') || '';
+            
+            setUserInfo({
+              email: email,
+              firstName: firstName,
+              lastName: lastName,
+            });
+            
+            // Also store in localStorage for future use
+            localStorage.setItem('userEmail', email);
+          } else {
+            // Fallback: try to get from localStorage
+            const storedEmail = localStorage.getItem('userEmail');
+            if (storedEmail) {
+              console.log('✅ Found email in localStorage:', storedEmail); // Debug log
+              setUserInfo({
+                email: storedEmail,
+                firstName: storedEmail.split('@')[0] || 'User',
+                lastName: '',
+              });
+            } else {
+              console.warn('⚠️ No email found in token or localStorage'); // Debug log
+              // Set a default so it doesn't show "Loading..."
+              setUserInfo({
+                email: 'user@example.com',
+                firstName: 'User',
+                lastName: '',
+              });
+            }
+          }
+        } catch (e) {
+          console.error('❌ Error decoding token:', e); // Debug log
+          // If token decode fails, try localStorage
+          const storedEmail = localStorage.getItem('userEmail');
+          if (storedEmail) {
+            console.log('✅ Using email from localStorage after error:', storedEmail);
+            setUserInfo({
+              email: storedEmail,
+              firstName: storedEmail.split('@')[0] || 'User',
+              lastName: '',
+            });
+          } else {
+            // Set default
+            setUserInfo({
+              email: 'user@example.com',
+              firstName: 'User',
+              lastName: '',
+            });
+          }
+        }
+      } else {
+        console.warn('⚠️ No token found in localStorage'); // Debug log
+        // Try to get email from localStorage anyway
+        const storedEmail = localStorage.getItem('userEmail');
+        if (storedEmail) {
+          setUserInfo({
+            email: storedEmail,
+            firstName: storedEmail.split('@')[0] || 'User',
+            lastName: '',
+          });
+        }
+      }
+    };
+    
+    fetchUserInfo();
+  }, []);
+
   // Chart data using real data
   const lineChartData = {
     labels: chartData.lineChart.labels.length > 0 ? chartData.lineChart.labels : ['No data yet'],
@@ -232,10 +324,10 @@ export default function Dashboard() {
       <>
         <CustomCursor />
         <ParticleBackground />
-        <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center transition-colors">
           <div className="text-center">
-            <div className="w-16 h-16 border-4 border-black border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-xl font-semibold text-black">Loading your dashboard...</p>
+            <div className="w-16 h-16 border-4 border-black dark:border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-xl font-semibold text-black dark:text-white transition-colors">Loading your dashboard...</p>
           </div>
         </div>
       </>
@@ -247,99 +339,246 @@ export default function Dashboard() {
       <CustomCursor />
       <ParticleBackground />
       
-      <div className="min-h-screen bg-white">
-        {/* Navigation */}
-        <nav className="bg-white border-b-2 border-gray-200 px-6 py-4">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center space-x-8">
+      <div className="min-h-screen bg-white dark:bg-gray-900 flex transition-colors">
+        {/* Left Sidebar */}
+        <motion.aside 
+          className={`bg-white dark:bg-gray-800 border-r-2 border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ${
+            sidebarCollapsed ? 'w-20' : 'w-64'
+          }`}
+          initial={false}
+          animate={{ width: sidebarCollapsed ? 80 : 256 }}
+          style={{
+            transformStyle: 'preserve-3d',
+            perspective: '1000px',
+            boxShadow: '10px 0 30px rgba(0, 0, 0, 0.1), inset -5px 0 20px rgba(0, 0, 0, 0.05)',
+          }}
+        >
+          {/* Logo & Toggle */}
+          <div className="p-6 border-b-2 border-gray-200 dark:border-gray-700 flex items-center justify-between transition-colors">
+            {!sidebarCollapsed && (
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-10 h-10 bg-black dark:bg-white rounded-lg flex items-center justify-center transition-colors">
+                  <svg className="w-6 h-6 text-white dark:text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
                 </div>
-                <span className="text-2xl font-bold text-black">UK Jobs Insider</span>
+                <span className="text-xl font-bold text-black dark:text-white transition-colors">MYATS</span>
               </div>
+            )}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <svg className="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {sidebarCollapsed ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                )}
+              </svg>
+            </button>
+          </div>
+
+          {/* Menu */}
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto" style={{ transformStyle: 'preserve-3d' }}>
+            <div className="mb-6">
+              {!sidebarCollapsed && (
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-3 transition-colors">MENU</p>
+              )}
+              <motion.button
+                onClick={() => setActiveMenuItem('dashboard')}
+                whileHover={{ x: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg transition-all ${
+                  activeMenuItem === 'dashboard'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-black dark:text-white border-l-4 border-black dark:border-white shadow-lg'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                style={{
+                  transformStyle: 'preserve-3d',
+                  boxShadow: activeMenuItem === 'dashboard' 
+                    ? '5px 5px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5)' 
+                    : 'none'
+                }}
+                title="Dashboard"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium">Dashboard</span>}
+              </motion.button>
+              <motion.button
+                onClick={() => window.location.href = '/dashboard/applications'}
+                whileHover={{ x: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg transition-all ${
+                  activeMenuItem === 'applications'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-black dark:text-white border-l-4 border-black dark:border-white shadow-lg'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                style={{
+                  transformStyle: 'preserve-3d',
+                  boxShadow: activeMenuItem === 'applications' 
+                    ? '5px 5px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5)' 
+                    : 'none'
+                }}
+                title="Applications"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium">Applications</span>}
+              </motion.button>
+              <motion.button
+                onClick={() => window.location.href = '/dashboard/cold-emails'}
+                whileHover={{ x: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg transition-all ${
+                  activeMenuItem === 'cold-emails'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-black dark:text-white border-l-4 border-black dark:border-white shadow-lg'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                style={{
+                  transformStyle: 'preserve-3d',
+                  boxShadow: activeMenuItem === 'cold-emails' 
+                    ? '5px 5px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5)' 
+                    : 'none'
+                }}
+                title="Cold Emails"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium">Cold Emails</span>}
+              </motion.button>
               
-              <div className="flex space-x-6">
-                <button className="px-4 py-2 text-black font-medium border-b-2 border-black">
-                  Dashboard
-                </button>
-                <button 
-                  onClick={() => window.location.href = '/dashboard/applications'}
-                  className="px-4 py-2 text-gray-700 hover:text-black font-medium transition"
-                >
-                  Applications
-                </button>
-                <button 
-                  onClick={() => window.location.href = '/dashboard/cold-emails'}
-                  className="px-4 py-2 text-gray-700 hover:text-black font-medium transition"
-                >
-                  Cold Emails
-                </button>
-              </div>
+              {/* Add Application Button in Sidebar */}
+              <motion.button
+                onClick={() => setShowAIModal(true)}
+                whileHover={{ x: 5, scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-2 mt-2 rounded-lg bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 transition-all`}
+                style={{ 
+                  transformStyle: 'preserve-3d',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                }}
+                title="Upcoming Features"
+              >
+                <svg className={`${sidebarCollapsed ? 'w-4 h-4' : 'w-4 h-4'} flex-shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium text-sm">Upcoming Features</span>}
+              </motion.button>
             </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="bg-green-50 border-2 border-green-500 text-green-800 px-4 py-2 rounded-full text-sm font-semibold">
-                ✓ All Systems Active
-              </div>
-              <button
+
+            {/* General Section */}
+            <div className="mt-8">
+              {!sidebarCollapsed && (
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-3 transition-colors">GENERAL</p>
+              )}
+              <motion.button 
+                onClick={() => {
+                  toast.success('No new notifications');
+                  setNotificationCount(0);
+                }}
+                whileHover={{ x: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all relative`}
+                style={{ transformStyle: 'preserve-3d' }}
+                title="Notifications"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium">Notifications</span>}
+                {notificationCount > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-black dark:bg-white rounded-full animate-pulse"></span>
+                )}
+              </motion.button>
+              <motion.button 
+                onClick={() => window.location.href = '/dashboard/settings'}
+                whileHover={{ x: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all`}
+                style={{ transformStyle: 'preserve-3d' }}
+                title="Settings"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium">Settings</span>}
+              </motion.button>
+              <motion.button 
+                whileHover={{ x: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all`}
+                style={{ transformStyle: 'preserve-3d' }}
+                title="Help"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium">Help</span>}
+              </motion.button>
+              <motion.button
                 onClick={() => {
                   localStorage.removeItem('token');
                   window.location.href = '/login';
                 }}
-                className="px-6 py-2 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition"
+                whileHover={{ x: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all`}
+                style={{ transformStyle: 'preserve-3d' }}
+                title="Logout"
               >
-                Logout
-              </button>
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                {!sidebarCollapsed && <span className="font-medium">Logout</span>}
+              </motion.button>
+            </div>
+          </nav>
+
+          {/* User Profile at Bottom */}
+          <div className="p-4 border-t-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition-colors">
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
+              <div className="w-10 h-10 bg-black dark:bg-white rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-gray-200 dark:ring-gray-600 transition-colors">
+                <span className="text-white dark:text-black font-semibold text-sm">
+                  {userInfo.firstName?.[0]?.toUpperCase() || userInfo.email?.[0]?.toUpperCase() || 'U'}
+                </span>
+              </div>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-black dark:text-white truncate transition-colors">
+                    {userInfo.firstName && userInfo.lastName 
+                      ? `${userInfo.firstName} ${userInfo.lastName}`
+                      : userInfo.firstName || userInfo.email?.split('@')[0] || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 truncate transition-colors" title={userInfo.email}>
+                    {userInfo.email || 'Loading email...'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
-        </nav>
+        </motion.aside>
 
-        <div className="max-w-7xl mx-auto p-6 space-y-8">
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Main Content */}
+          <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 p-6 space-y-8 transition-colors">
           {/* Header */}
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-5xl font-bold text-black mb-2">Dashboard</h1>
-                <p className="text-gray-600 text-lg">Track, analyze, and optimize your job search journey</p>
+                <h1 className="text-5xl font-bold text-black dark:text-white mb-2 transition-colors">Dashboard</h1>
+                <p className="text-gray-600 dark:text-gray-400 text-lg transition-colors">Agentic job tracker, analyze, and optimize your job search journey</p>
               </div>
               
-              {/* Scraping Buttons */}
+              {/* Action Buttons */}
               <div className="flex items-center gap-3">
-                <div
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.nativeEvent.stopImmediatePropagation();
-                    toast.success('🚀 Feature Coming Soon!', {
-                      duration: 4000,
-                      icon: '⏳',
-                      style: {
-                        background: 'linear-gradient(to right, #10b981, #059669)',
-                        color: 'white',
-                        fontWeight: 'bold',
-                      },
-                    });
-                    return false;
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onMouseUp={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  className="px-6 py-3 bg-gradient-to-r from-gray-400 to-gray-600 text-white rounded-lg font-semibold shadow-lg transition-all flex items-center gap-2 cursor-not-allowed opacity-75 select-none pointer-events-auto"
-                  title="Feature Coming Soon - Click for details"
-                  style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-                >
-                  <span className="text-xl">🔍</span>
-                  <span>Scrape Jobs (Coming Soon)</span>
-                </div>
-                
                 <motion.button
                   onClick={() => {
                     window.open('https://www.linkedin.com/my-items/saved-jobs/', '_blank');
@@ -352,9 +591,9 @@ export default function Dashboard() {
                       },
                     });
                   }}
-                  whileHover={{ scale: 1.05, boxShadow: '0 10px 30px rgba(0,0,0,0.3)', y: -2 }}
+                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="px-6 py-3 bg-black text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2 border-2 border-gray-200"
+                  className="px-6 py-3 bg-black dark:bg-gray-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl hover:bg-gray-800 dark:hover:bg-gray-600 transition-all flex items-center gap-2 border-2 border-gray-200 dark:border-gray-600"
                 >
                   <span className="text-xl">📥</span>
                   Import from LinkedIn
@@ -368,18 +607,18 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white border-4 border-black rounded-xl p-6 shadow-lg"
+              className="bg-white dark:bg-gray-800 border-4 border-black dark:border-white rounded-xl p-6 shadow-lg transition-colors"
             >
               <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-14 h-14 bg-black rounded-lg flex items-center justify-center">
+                <div className="flex-shrink-0 w-14 h-14 bg-black dark:bg-white rounded-lg flex items-center justify-center transition-colors">
                   <span className="text-3xl">🚀</span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-black mb-2">Import Your LinkedIn Jobs in 3 Clicks!</h3>
-                  <div className="space-y-2 text-gray-700">
-                    <p><strong className="text-black">1.</strong> Click the "Import from LinkedIn" button above</p>
-                    <p><strong className="text-black">2.</strong> On LinkedIn, click the Chrome extension icon</p>
-                    <p><strong className="text-black">3.</strong> Click "📥 Capture My Applied Jobs" and done! All jobs sync here automatically</p>
+                  <h3 className="text-xl font-bold text-black dark:text-white mb-2 transition-colors">Import Your LinkedIn Jobs in 3 Clicks!</h3>
+                  <div className="space-y-2 text-gray-700 dark:text-gray-300 transition-colors">
+                    <p><strong className="text-black dark:text-white transition-colors">1.</strong> Click the "Import from LinkedIn" button above</p>
+                    <p><strong className="text-black dark:text-white transition-colors">2.</strong> On LinkedIn, click the Chrome extension icon</p>
+                    <p><strong className="text-black dark:text-white transition-colors">3.</strong> Click "📥 Capture My Applied Jobs" and done! All jobs sync here automatically</p>
                   </div>
                 </div>
               </div>
@@ -396,8 +635,8 @@ export default function Dashboard() {
                 whileTap={{ scale: 0.95 }}
                 className={`px-6 py-3 rounded-lg font-semibold transition-all ${
                   timeRange === days 
-                    ? 'bg-black text-white shadow-lg' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg' 
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >
                 Last {days} days
@@ -408,7 +647,7 @@ export default function Dashboard() {
           {/* Key Metrics - 3D Flip Cards with FIXED HEIGHT */}
           <motion.div 
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16"
-            style={{ minHeight: '315px' }}
+            style={{ minHeight: '220px' }}
             variants={{
               hidden: {},
               visible: {
@@ -506,13 +745,21 @@ export default function Dashboard() {
               value={`${stats.responseRate.toFixed(1)}%`}
               subtitle={`${stats.responsesReceived} responses`}
               icon="📧"
-              trend={Math.round(stats.responseRate)}
-              trendPositive={stats.responseRate >= 15}
+              trend={(() => {
+                // Calculate percentage point change from previous period
+                const currentRate = stats.responseRate || 0;
+                const previousRate = stats.previousResponseRate || 0;
+                
+                // Show absolute percentage point difference
+                const change = Math.round(Math.abs(currentRate - previousRate) * 10) / 10;
+                return change > 0 ? change : currentRate; // If no change, show current rate
+              })()}
+              trendPositive={stats.responseRate >= stats.previousResponseRate}
               detailedStats={{
-                responses: stats.responsesReceived,
-                interviews: stats.interviews,
-                offers: stats.offers,
-                pending: stats.pending
+                'Current Rate': `${stats.responseRate}%`,
+                'Responses': stats.responsesReceived,
+                'Interviews': stats.interviews,
+                'Offers': stats.offers
               }}
             />
             
@@ -521,13 +768,21 @@ export default function Dashboard() {
               value={`${stats.currentStreak} days`}
               subtitle={`Best: ${stats.longestStreak} days`}
               icon="🔥"
-              trend={stats.currentStreak}
-              trendPositive={stats.currentStreak > 0}
+              trend={(() => {
+                // Calculate change from previous week's streak
+                const currentStreak = stats.currentStreak || 0;
+                const previousStreak = stats.previousStreak || 0;
+                
+                // Show absolute change in days
+                const change = Math.abs(currentStreak - previousStreak);
+                return change > 0 ? change : currentStreak; // If no change, show current streak
+              })()}
+              trendPositive={stats.currentStreak >= stats.previousStreak}
               detailedStats={{
-                current: stats.currentStreak,
-                longest: stats.longestStreak,
-                thisMonth: stats.monthlyApplications,
-                weeklyGoal: stats.weeklyGoal
+                'Current': `${stats.currentStreak} days`,
+                'Previous': `${stats.previousStreak} days`,
+                'Longest': `${stats.longestStreak} days`,
+                'This Month': stats.monthlyApplications
               }}
             />
           </motion.div>
@@ -540,27 +795,27 @@ export default function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
             >
               <GlassCard className="p-6" depth="medium">
-                <h3 className="text-2xl font-bold text-black mb-4">⏱️ Total Time Investment</h3>
+                <h3 className="text-2xl font-bold text-black dark:text-white mb-4 transition-colors">⏱️ Total Time Investment</h3>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-black text-white rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-black dark:bg-gray-800 text-white rounded-xl shadow-md transition-colors">
                     <span className="text-lg font-medium">Total Time Spent</span>
                     <span className="text-3xl font-bold">{stats.totalTimeSpent} hours</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <div className="text-xs text-gray-600 mb-1">Average per App</div>
-                      <div className="text-xl font-bold text-black">{stats.averageTimePerApp} min</div>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 transition-colors">Average per App</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.averageTimePerApp} min</div>
                     </div>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <div className="text-xs text-gray-600 mb-1">Total Applications</div>
-                      <div className="text-xl font-bold text-black">{stats.totalApplications}</div>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 transition-colors">Total Applications</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.totalApplications}</div>
                     </div>
                   </div>
                 </div>
               </GlassCard>
 
               <GlassCard className="p-6" depth="medium">
-                <h3 className="text-2xl font-bold text-black mb-4">📅 Daily Application Counts</h3>
+                <h3 className="text-2xl font-bold text-black dark:text-white mb-4 transition-colors">📅 Daily Application Counts</h3>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {Object.entries(stats.dailyCounts || {})
                     .sort(([a], [b]) => b.localeCompare(a))
@@ -574,13 +829,13 @@ export default function Dashboard() {
                       return (
                         <motion.div
                           key={date}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                          className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors"
                           whileHover={{ scale: 1.02, x: 5 }}
                         >
-                          <span className="font-medium text-black">{formattedDate}</span>
+                          <span className="font-medium text-black dark:text-white transition-colors">{formattedDate}</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-xl font-bold text-black">{count}</span>
-                            <span className="text-sm text-gray-600">
+                            <span className="text-xl font-bold text-black dark:text-white transition-colors">{count}</span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400 transition-colors">
                               {count === 1 ? 'application' : 'applications'}
                             </span>
                           </div>
@@ -588,7 +843,7 @@ export default function Dashboard() {
                       );
                     })}
                   {Object.keys(stats.dailyCounts || {}).length === 0 && (
-                    <div className="text-center text-gray-500 py-8">
+                    <div className="text-center text-gray-500 dark:text-gray-400 py-8 transition-colors">
                       No daily data available yet
                     </div>
                   )}
@@ -608,14 +863,14 @@ export default function Dashboard() {
             >
               <GlassCard className="p-6 h-full" depth="heavy">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-2xl font-bold text-black">Application Trend</h3>
+                  <h3 className="text-2xl font-bold text-black dark:text-white transition-colors">Application Trend</h3>
                   <motion.div 
                     className="flex items-center space-x-2"
                     animate={{ scale: [1, 1.05, 1] }}
                     transition={{ duration: 2, repeat: Infinity }}
                   >
-                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-lg"></div>
-                    <span className="text-sm text-gray-600 font-medium">Live Data</span>
+                    <div className="w-3 h-3 bg-black dark:bg-white rounded-full animate-pulse shadow-lg transition-colors"></div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400 font-medium transition-colors">Live Data</span>
                   </motion.div>
                 </div>
                 <div style={{ height: '250px' }}>
@@ -638,11 +893,11 @@ export default function Dashboard() {
                       scales: {
                         y: {
                           beginAtZero: true,
-                          ticks: { precision: 0, color: '#666666' },
-                          grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                          ticks: { precision: 0, color: document.documentElement.classList.contains('dark') ? '#9ca3af' : '#666666' },
+                          grid: { color: document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }
                         },
                         x: {
-                          ticks: { color: '#666666' },
+                          ticks: { color: document.documentElement.classList.contains('dark') ? '#9ca3af' : '#666666' },
                           grid: { display: false }
                         }
                       }
@@ -660,7 +915,7 @@ export default function Dashboard() {
               className="h-full"
             >
               <GlassCard className="p-6 h-full" depth="heavy">
-                <h3 className="text-2xl font-bold text-black mb-4">Application Status</h3>
+                <h3 className="text-2xl font-bold text-black dark:text-white mb-4 transition-colors">Application Status</h3>
                 <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Doughnut 
                     data={statusChartData}
@@ -673,16 +928,16 @@ export default function Dashboard() {
                           labels: {
                             padding: 15,
                             font: { size: 12, weight: 'bold' },
-                            color: '#000000',
+                            color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
                             usePointStyle: true,
                           }
                         },
                         tooltip: {
-                          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                          backgroundColor: document.documentElement.classList.contains('dark') ? 'rgba(31, 41, 55, 0.95)' : 'rgba(0, 0, 0, 0.9)',
                           padding: 15,
                           titleFont: { size: 14 },
                           bodyFont: { size: 13 },
-                          borderColor: '#000000',
+                          borderColor: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
                           borderWidth: 1,
                         }
                       }
@@ -696,7 +951,7 @@ export default function Dashboard() {
           {/* Source Performance & Cold Email Stats - SAME HEIGHT AS CHARTS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" style={{ minHeight: '350px' }}>
             <GlassCard className="p-6 h-full" depth="medium">
-              <h3 className="text-2xl font-bold text-black mb-4">Performance by Job Board</h3>
+              <h3 className="text-2xl font-bold text-black dark:text-white mb-4 transition-colors">Performance by Job Board</h3>
               <div style={{ height: '300px' }}>
                 {sourcePerformance.length > 0 ? (
                   <Bar 
@@ -747,9 +1002,9 @@ export default function Dashboard() {
                       scales: {
                         y: {
                           beginAtZero: true,
-                          grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                          grid: { color: document.documentElement.classList.contains('dark') ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' },
                           ticks: { 
-                            color: '#666666', 
+                            color: document.documentElement.classList.contains('dark') ? '#9ca3af' : '#666666', 
                             precision: 0,
                             stepSize: 1
                           }
@@ -757,7 +1012,7 @@ export default function Dashboard() {
                         x: {
                           grid: { display: false },
                           ticks: { 
-                            color: '#666666',
+                            color: document.documentElement.classList.contains('dark') ? '#9ca3af' : '#666666',
                             maxRotation: 45,
                             minRotation: 45
                           }
@@ -766,16 +1021,12 @@ export default function Dashboard() {
                     }}
                   />
                 ) : (
-                  <div style={{ 
-                    height: '250px', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    color: '#666666'
+                  <div className="flex flex-col items-center justify-center" style={{ 
+                    height: '250px',
+                    color: document.documentElement.classList.contains('dark') ? '#9ca3af' : '#666666'
                   }}>
                     <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
-                    <p style={{ fontSize: '16px', fontWeight: 'bold' }}>No job board data yet</p>
+                    <p className="font-bold" style={{ fontSize: '16px' }}>No job board data yet</p>
                     <p style={{ fontSize: '14px', marginTop: '8px' }}>Apply to jobs to see performance metrics</p>
                   </div>
                 )}
@@ -784,21 +1035,21 @@ export default function Dashboard() {
 
             {/* Cold Email Metrics */}
             <GlassCard className="p-6 h-full" depth="medium">
-              <h3 className="text-2xl font-bold text-black mb-6">Cold Email Performance</h3>
+              <h3 className="text-2xl font-bold text-black dark:text-white mb-6 transition-colors">Cold Email Performance</h3>
               <div className="space-y-4">
                 <motion.div 
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
+                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors"
                   whileHover={{ scale: 1.02 }}
                 >
-                  <span className="text-gray-700 font-medium">Emails Sent</span>
-                  <span className="text-2xl font-bold">{stats.coldEmailsSent}</span>
+                  <span className="text-gray-700 dark:text-gray-300 font-medium transition-colors">Emails Sent</span>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white transition-colors">{stats.coldEmailsSent}</span>
                 </motion.div>
                 <motion.div 
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
+                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors"
                   whileHover={{ scale: 1.02 }}
                 >
-                  <span className="text-gray-700 font-medium">Responses</span>
-                  <span className="text-2xl font-bold">{stats.coldEmailResponses}</span>
+                  <span className="text-gray-700 dark:text-gray-300 font-medium transition-colors">Responses</span>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white transition-colors">{stats.coldEmailResponses}</span>
                 </motion.div>
                 <motion.div 
                   className="flex items-center justify-between p-4 bg-black text-white rounded-xl"
@@ -813,33 +1064,40 @@ export default function Dashboard() {
 
           {/* CV Performance - SMALLER SIZE */}
           <GlassCard className="p-5 mb-8" depth="medium">
-            <h3 className="text-xl font-bold text-black mb-4">CV Version Performance</h3>
+            <h3 className="text-xl font-bold text-black dark:text-white mb-4 transition-colors">CV Version Performance</h3>
             <div className="space-y-3">
-              {stats.cvVersionPerformance.map((cv, index) => (
-                <motion.div 
-                  key={index} 
-                  className="bg-gray-50 p-3 rounded-xl"
-                  whileHover={{ scale: 1.01, x: 5 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-base font-bold text-black">{cv.name}</span>
-                    <div className="text-right">
-                      <span className="text-xl font-bold text-black">{cv.conversionRate.toFixed(1)}%</span>
-                      <p className="text-xs text-gray-600">{cv.interviews} interviews</p>
+              {stats.cvVersionPerformance && stats.cvVersionPerformance.length > 0 ? (
+                stats.cvVersionPerformance.map((cv, index) => (
+                  <motion.div 
+                    key={index} 
+                    className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl transition-colors"
+                    whileHover={{ scale: 1.01, x: 5 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-base font-bold text-black dark:text-white transition-colors">{cv.name}</span>
+                      <div className="text-right">
+                        <span className="text-xl font-bold text-black dark:text-white transition-colors">{cv.conversionRate.toFixed(1)}%</span>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 transition-colors">{cv.interviews} interviews</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                    <motion.div 
-                      className="bg-black h-2 rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${cv.conversionRate}%` }}
-                      transition={{ duration: 1, delay: index * 0.2 }}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-500 mt-1">{cv.applications} applications</span>
-                </motion.div>
-              ))}
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden transition-colors">
+                      <motion.div 
+                        className="bg-black dark:bg-white h-2 rounded-full transition-colors"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${cv.conversionRate}%` }}
+                        transition={{ duration: 1, delay: index * 0.2 }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 transition-colors">{cv.applications} applications</span>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center text-gray-500 dark:text-gray-400 py-8 transition-colors">
+                  <p className="mb-2">📄 No CV versions tracked yet</p>
+                  <p className="text-sm">Add applications with different CV versions to see performance metrics</p>
+                </div>
+              )}
             </div>
           </GlassCard>
 
@@ -847,23 +1105,23 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             {/* Goal Achievement */}
             <motion.div 
-              className="bg-black text-white rounded-xl p-8 shadow-sm"
+              className="bg-black dark:bg-gray-800 text-white rounded-xl p-8 shadow-sm transition-colors"
               whileHover={{ 
                 y: -3, 
-                boxShadow: "0 15px 30px rgba(0,0,0,0.3)"
+                boxShadow: "0 15px 30px rgba(0,0,0,0.1)"
               }}
               transition={{ type: "spring", stiffness: 300 }}
             >
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-3xl font-bold">Weekly Goal</h3>
-                  <p className="text-gray-300 mt-2">{stats.weeklyApplications}/{stats.weeklyGoal} applications</p>
+                  <h3 className="text-3xl font-bold text-white">Weekly Goal</h3>
+                  <p className="text-gray-300 dark:text-gray-400 mt-2 transition-colors">{stats.weeklyApplications}/{stats.weeklyGoal} applications</p>
                 </div>
-                <div className="text-6xl font-bold">
+                <div className="text-6xl font-bold text-white">
                   {stats.weeklyAchievement}%
                 </div>
               </div>
-              <div className="mt-6 bg-white/20 rounded-full h-4 overflow-hidden">
+              <div className="mt-6 bg-white/20 dark:bg-white/10 rounded-full h-4 overflow-hidden transition-colors">
                 <motion.div 
                   className="bg-white h-4 rounded-full"
                   initial={{ width: 0 }}
@@ -875,52 +1133,42 @@ export default function Dashboard() {
 
             {/* Best Timing */}
             <motion.div 
-              className="bg-white border-2 border-gray-200 rounded-xl p-8 shadow-sm"
+              className="bg-black dark:bg-gray-800 text-white rounded-xl p-8 shadow-sm transition-colors"
               whileHover={{ 
                 y: -3, 
                 boxShadow: "0 15px 30px rgba(0,0,0,0.1)"
               }}
               transition={{ type: "spring", stiffness: 300 }}
             >
-              <h3 className="text-2xl font-bold text-black mb-6">Optimal Application Timing</h3>
+              <h3 className="text-2xl font-bold mb-6 text-white">Optimal Application Timing</h3>
               <div className="space-y-4">
                 <motion.div 
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
+                  className="flex items-center justify-between p-4 bg-white/10 dark:bg-white/5 rounded-xl transition-colors"
                   whileHover={{ scale: 1.02 }}
                 >
-                  <span className="text-gray-700 font-medium">Best Day</span>
-                  <span className="text-xl font-bold text-black">{stats.bestDayOfWeek}</span>
+                  <span className="font-medium text-white">Best Day</span>
+                  <span className="text-xl font-bold text-white">{stats.bestDayOfWeek}</span>
                 </motion.div>
                 <motion.div 
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
+                  className="flex items-center justify-between p-4 bg-white/10 dark:bg-white/5 rounded-xl transition-colors"
                   whileHover={{ scale: 1.02 }}
                 >
-                  <span className="text-gray-700 font-medium">Best Time</span>
-                  <span className="text-xl font-bold text-black">{stats.bestTimeOfDay}</span>
+                  <span className="font-medium text-white">Best Time</span>
+                  <span className="text-xl font-bold text-white">{stats.bestTimeOfDay}</span>
                 </motion.div>
                 <motion.div 
-                  className="flex items-center justify-between p-4 bg-black text-white rounded-xl"
+                  className="flex items-center justify-between p-4 bg-white/20 dark:bg-white/10 rounded-xl transition-colors"
                   whileHover={{ scale: 1.02, boxShadow: "0 10px 20px rgba(0,0,0,0.2)" }}
                 >
-                  <span className="font-medium">Avg. Response Time</span>
-                  <span className="text-xl font-bold">{stats.averageResponseTime} days</span>
+                  <span className="font-medium text-white">Avg. Response Time</span>
+                  <span className="text-xl font-bold text-white">{stats.averageResponseTime} days</span>
                 </motion.div>
               </div>
             </motion.div>
           </div>
+          </div>
         </div>
 
-        {/* AI Features FAB */}
-        <motion.button
-          onClick={() => setShowAIModal(true)}
-          whileHover={{ scale: 1.1, rotate: 90 }}
-          whileTap={{ scale: 0.9 }}
-          className="fixed bottom-8 right-8 bg-black text-white p-6 rounded-full shadow-2xl z-50 border-2 border-gray-200"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-          </svg>
-        </motion.button>
 
         {/* AI Features Modal */}
         {showAIModal && (
@@ -984,7 +1232,7 @@ export default function Dashboard() {
                         <span className="text-2xl">🤖</span>
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-black mb-2">AI AGENTIC SCRAPING</h3>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">AI AGENTIC SCRAPING</h3>
                         <p className="text-sm text-gray-600 leading-relaxed">
                           Autonomous AI agents that automatically find, scrape, and apply to relevant jobs 24/7
                         </p>
@@ -1017,7 +1265,7 @@ export default function Dashboard() {
                         <span className="text-2xl">🔗</span>
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-black mb-2">CONNECT TO YOUR GPTS</h3>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">CONNECT TO YOUR GPTS</h3>
                         <p className="text-sm text-gray-600 leading-relaxed">
                           Seamless integration with ChatGPT and custom GPTs for enhanced AI assistance
                         </p>
@@ -1050,7 +1298,7 @@ export default function Dashboard() {
                         <span className="text-2xl">🧠</span>
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-black mb-2">AI ASSISTANT</h3>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">AI ASSISTANT</h3>
                         <p className="text-sm text-gray-600 leading-relaxed">
                           Personalized job recommendations, CV optimization, and strategic career insights
                         </p>
@@ -1083,7 +1331,7 @@ export default function Dashboard() {
                         <span className="text-2xl">💬</span>
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold text-black mb-2">AI SUPPORT CHATBOTS</h3>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">AI SUPPORT CHATBOTS</h3>
                         <p className="text-sm text-gray-600 leading-relaxed">
                           Intelligent conversational AI to optimize your applications and interview prep
                         </p>
@@ -1110,10 +1358,10 @@ export default function Dashboard() {
 // 3D Metric Card Component with Flip Card - FIXED HEIGHT
 function MetricCard3D({ title, value, subtitle, icon, trend, trendPositive, detailedStats }: any) {
   const front = (
-    <GlassCard className="p-6 h-full" depth="medium">
-      <div className="flex items-center justify-between mb-4">
+    <GlassCard className="p-4 h-full overflow-hidden flex flex-col" depth="medium">
+      <div className="flex items-center justify-between mb-3">
         <motion.div 
-          className="text-4xl"
+          className="text-3xl"
           animate={{ 
             rotateY: [0, 10, 0, -10, 0],
             scale: [1, 1.1, 1]
@@ -1126,9 +1374,13 @@ function MetricCard3D({ title, value, subtitle, icon, trend, trendPositive, deta
         >
           {icon}
         </motion.div>
-        {typeof trend === 'number' && (
+        {typeof trend === 'number' && trend > 0 && (
           <motion.div 
-            className={`px-3 py-1 rounded-full text-sm font-bold ${trendPositive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+            className={`px-2 py-1 rounded-full text-xs font-bold transition-colors ${
+              trendPositive 
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-600' 
+                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-600'
+            }`}
             whileHover={{ scale: 1.1 }}
             animate={{ 
               y: [0, -2, 0],
@@ -1144,7 +1396,7 @@ function MetricCard3D({ title, value, subtitle, icon, trend, trendPositive, deta
         )}
       </div>
       <motion.h3 
-        className="text-3xl font-bold text-black mb-2"
+        className="text-2xl font-bold text-black dark:text-white mb-1 transition-colors"
         animate={{ 
           scale: [1, 1.02, 1]
         }}
@@ -1156,12 +1408,12 @@ function MetricCard3D({ title, value, subtitle, icon, trend, trendPositive, deta
       >
         {value}
       </motion.h3>
-      <p className="text-sm font-semibold text-gray-700">{title}</p>
+      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 transition-colors">{title}</p>
       {subtitle && (
-        <p className="text-xs text-gray-500 mt-2">{subtitle}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 transition-colors">{subtitle}</p>
       )}
       <motion.div 
-        className="mt-2 text-xs text-gray-400 text-center"
+        className="mt-auto pt-2 text-xs text-gray-400 dark:text-gray-500 text-center transition-colors"
         animate={{ opacity: [0.5, 1, 0.5] }}
         transition={{ duration: 2, repeat: Infinity }}
       >
@@ -1171,52 +1423,54 @@ function MetricCard3D({ title, value, subtitle, icon, trend, trendPositive, deta
   );
 
   const back = (
-    <GlassCard className="p-6 h-full bg-gradient-to-br from-black to-gray-800 text-white" depth="heavy">
-      <div className="flex items-center justify-between mb-4">
+    <GlassCard className="p-4 h-full bg-gradient-to-br from-black to-gray-800 text-white overflow-hidden flex flex-col" depth="heavy">
+      <div className="flex items-center justify-between mb-2">
         <motion.div 
-          className="text-4xl"
+          className="text-3xl"
           animate={{ rotateZ: 360 }}
           transition={{ duration: 2, ease: "easeInOut" }}
         >
           {icon}
         </motion.div>
       </div>
-      <h3 className="text-2xl font-bold mb-3">{title} Details</h3>
+      <h3 className="text-lg font-bold mb-2 text-white">{title} Details</h3>
       
-      {detailedStats ? (
-        <div className="space-y-2 text-sm">
-          {Object.entries(detailedStats).map(([key, val]: [string, any], index) => (
-            <motion.div 
-              key={key} 
-              className="flex justify-between items-center py-1 border-b border-white/10"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <span className="text-white/70 capitalize text-xs">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-              <span className="text-white font-bold text-sm">{typeof val === 'number' ? val.toLocaleString() : val}</span>
-            </motion.div>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between items-center py-1 border-b border-white/10">
-            <span className="text-white/70 text-xs">Weekly Growth</span>
-            <span className="text-white font-bold text-sm">{trend}%</span>
+      <div className="flex-1 overflow-y-auto">
+        {detailedStats ? (
+          <div className="space-y-1 text-sm">
+            {Object.entries(detailedStats).map(([key, val]: [string, any], index) => (
+              <motion.div 
+                key={key} 
+                className="flex justify-between items-center py-1 border-b border-white/10"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <span className="text-white/70 capitalize text-xs">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                <span className="text-white font-bold text-xs">{typeof val === 'number' ? val.toLocaleString() : val}</span>
+              </motion.div>
+            ))}
           </div>
-          <div className="flex justify-between items-center py-1 border-b border-white/10">
-            <span className="text-white/70 text-xs">Target</span>
-            <span className="text-white font-bold text-sm">On Track</span>
+        ) : (
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between items-center py-1 border-b border-white/10">
+              <span className="text-white/70 text-xs">Weekly Growth</span>
+              <span className="text-white font-bold text-xs">{trend}%</span>
+            </div>
+            <div className="flex justify-between items-center py-1 border-b border-white/10">
+              <span className="text-white/70 text-xs">Target</span>
+              <span className="text-white font-bold text-xs">On Track</span>
+            </div>
+            <div className="flex justify-between items-center py-1">
+              <span className="text-white/70 text-xs">Status</span>
+              <span className="text-white font-bold text-xs">✓ Active</span>
+            </div>
           </div>
-          <div className="flex justify-between items-center py-1">
-            <span className="text-white/70 text-xs">Status</span>
-            <span className="text-green-400 font-bold text-sm">✓ Active</span>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
       
       <motion.div 
-        className="mt-2 text-xs text-white/50 text-center"
+        className="mt-1 text-xs text-white/50 text-center"
         animate={{ opacity: [0.5, 1, 0.5] }}
         transition={{ duration: 2, repeat: Infinity }}
       >
@@ -1231,17 +1485,19 @@ function MetricCard3D({ title, value, subtitle, icon, trend, trendPositive, deta
         hidden: { opacity: 0, y: 20, scale: 0.9 },
         visible: { opacity: 1, y: 0, scale: 1 }
       }}
-      className="h-full"
-      style={{ height: '180px' }} // FIXED HEIGHT TO PREVENT OVERLAP
+      className="w-full"
+      style={{ height: '200px' }} // FIXED HEIGHT FOR ALL CARDS
       whileHover={{ y: -3 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
-      <FlipCard 
-        front={front} 
-        back={back}
-        flipOnClick={true}
-        animationDuration={0.6}
-      />
+      <div className="h-full w-full">
+        <FlipCard 
+          front={front} 
+          back={back}
+          flipOnClick={true}
+          animationDuration={0.6}
+        />
+      </div>
     </motion.div>
   );
 }

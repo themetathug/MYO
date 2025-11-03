@@ -72,8 +72,8 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
       throw new Error('Invalid user data returned from database');
     }
 
-    // Generate token
-    const token = generateToken(user.id);
+    // Generate token with email
+    const token = generateToken(user.id, { email: user.email });
 
     logger.info(`New user registered: ${user.email}`);
 
@@ -135,8 +135,8 @@ router.post('/login', validateRequest(loginSchema), async (req, res) => {
       });
     }
 
-    // Generate token
-    const token = generateToken(user.id);
+    // Generate token with email
+    const token = generateToken(user.id, { email: user.email });
 
     logger.info(`User logged in: ${user.email}`);
 
