@@ -17,6 +17,44 @@ export async function initializeDatabase() {
   try {
     await pool.query('SELECT NOW()');
     logger.info('✅ Database connected successfully');
+
+    // Ensure cold_emails table has expected columns (for older installations)
+    await pool.query(`
+      ALTER TABLE IF EXISTS cold_emails
+        ADD COLUMN IF NOT EXISTS position VARCHAR(255);
+    `);
+
+    await pool.query(`
+      ALTER TABLE IF EXISTS cold_emails
+        ADD COLUMN IF NOT EXISTS location VARCHAR(255);
+    `);
+
+    await pool.query(`
+      ALTER TABLE IF EXISTS cold_emails
+        ADD COLUMN IF NOT EXISTS job_url TEXT;
+    `);
+
+    await pool.query(`
+      ALTER TABLE IF EXISTS cold_emails
+        ADD COLUMN IF NOT EXISTS sender_email VARCHAR(255);
+    `);
+
+    await pool.query(`
+      ALTER TABLE IF EXISTS cold_emails
+        ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'MANUAL';
+    `);
+
+    await pool.query(`
+      ALTER TABLE IF EXISTS cold_emails
+        ADD COLUMN IF NOT EXISTS message TEXT;
+    `);
+
+    await pool.query(`
+      ALTER TABLE IF EXISTS cold_emails
+        ADD COLUMN IF NOT EXISTS company VARCHAR(255);
+    `);
+
+    logger.info('✅ Ensured cold_emails table has required columns');
   } catch (error) {
     logger.error('Database connection failed:', error);
     throw error;

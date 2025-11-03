@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   first_name VARCHAR(100),
   last_name VARCHAR(100),
   subscription VARCHAR(20) DEFAULT 'FREE',
-  weekly_target INTEGER DEFAULT 10,
+  weekly_target INTEGER DEFAULT 50,
   monthly_target INTEGER DEFAULT 40,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
@@ -65,6 +65,50 @@ CREATE TABLE IF NOT EXISTS cold_emails (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Add email parser fields if missing
+DO $$ 
+BEGIN
+  -- Add position field
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'cold_emails' AND column_name = 'position'
+  ) THEN
+    ALTER TABLE cold_emails ADD COLUMN position VARCHAR(255);
+  END IF;
+  
+  -- Add location field
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'cold_emails' AND column_name = 'location'
+  ) THEN
+    ALTER TABLE cold_emails ADD COLUMN location VARCHAR(255);
+  END IF;
+  
+  -- Add job_url field
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'cold_emails' AND column_name = 'job_url'
+  ) THEN
+    ALTER TABLE cold_emails ADD COLUMN job_url TEXT;
+  END IF;
+  
+  -- Add sender_email field
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'cold_emails' AND column_name = 'sender_email'
+  ) THEN
+    ALTER TABLE cold_emails ADD COLUMN sender_email VARCHAR(255);
+  END IF;
+  
+  -- Add source field
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'cold_emails' AND column_name = 'source'
+  ) THEN
+    ALTER TABLE cold_emails ADD COLUMN source VARCHAR(50) DEFAULT 'MANUAL';
+  END IF;
+END $$;
 
 -- Add capture_method column to applications if missing
 DO $$ 

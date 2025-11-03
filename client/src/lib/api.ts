@@ -186,10 +186,49 @@ export const scraperAPI = {
   },
 };
 
+// Email Parser APIs
+export const emailParserAPI = {
+  testConnection: async (config: {
+    email: string;
+    password: string;
+    host: string;
+    port: number;
+    tls?: boolean;
+  }) => {
+    return fetchWithAuth('/api/email-parser/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  },
+
+  parse: async (config: {
+    email: string;
+    password: string;
+    host: string;
+    port: number;
+    tls?: boolean;
+    days?: number;
+  }) => {
+    return fetchWithAuth('/api/email-parser/parse', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  },
+
+  getGmailConfig: async () => {
+    return fetchWithAuth('/api/email-parser/gmail-config');
+  },
+
+  getOutlookConfig: async () => {
+    return fetchWithAuth('/api/email-parser/outlook-config');
+  },
+};
+
 export default {
   auth: authAPI,
   applications: applicationsAPI,
   coldEmails: coldEmailsAPI,
   analytics: analyticsAPI,
   scraper: scraperAPI,
+  emailParser: emailParserAPI,
 };

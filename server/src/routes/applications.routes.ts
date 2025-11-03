@@ -423,9 +423,20 @@ router.get('/stats/summary', async (req, res) => {
       }
     }
 
-    // Get applications with response
-    const appsWithResponse = allApps.filter((app: any) => app.response_date != null);
+    // Get applications with response (either has response_date OR progressed beyond APPLIED status)
+    const appsWithResponse = allApps.filter((app: any) => {
+      // Has explicit response date
+      if (app.response_date != null) return true;
+      
+      // Or has progressed beyond initial application (these are implicit responses)
+      const progressedStatuses = ['VIEWED', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'INTERVIEWED', 'OFFERED', 'ACCEPTED'];
+      if (progressedStatuses.includes(app.status)) return true;
+      
+      return false;
+    });
     const responseRate = total > 0 ? Math.round((appsWithResponse.length / total) * 100 * 100) / 100 : 0;
+    
+    logger.info(`Response stats for user ${userId}: total=${total}, responses=${appsWithResponse.length}, rate=${responseRate}%`);
 
     // Calculate average response time (in days)
     const responseTimes: number[] = [];
@@ -494,8 +505,9 @@ router.get('/stats/summary', async (req, res) => {
     ).length;
     
     const offers = allApps.filter((app: any) => 
-      app.status === 'OFFER_RECEIVED' || 
-      app.status === 'ACCEPTED'
+      app.status === 'OFFERED' ||          // User marks as OFFERED
+      app.status === 'OFFER_RECEIVED' ||   // Alternative status
+      app.status === 'ACCEPTED'            // Final acceptance
     ).length;
     
     const pending = allApps.filter((app: any) => 
@@ -503,6 +515,8 @@ router.get('/stats/summary', async (req, res) => {
       app.status === 'SCREENING' ||
       app.status === 'UNDER_REVIEW'
     ).length;
+    
+    logger.info(`Status counts for user ${userId}: interviews=${interviews}, offers=${offers}, pending=${pending}`);
 
     // Calculate best day of week
     const dayCounts: Record<number, number> = {};
@@ -573,18 +587,20 @@ router.get('/stats/summary', async (req, res) => {
       ? Math.round((weeklyApplications / weeklyGoal) * 100 * 100) / 100 
       : 0;
 
-    // Get cold email stats
+    // Get cold email stats - get ALL cold emails (not period-filtered)
     const coldEmailResult = await pool.query(
       `SELECT COUNT(*) as total, 
        SUM(CASE WHEN responded = true THEN 1 ELSE 0 END) as responses
-       FROM cold_emails WHERE user_id = $1 AND sent_at >= $2`,
-      [userId, startDate]
+       FROM cold_emails WHERE user_id = $1`,
+      [userId]
     );
-    const coldEmailsSent = parseInt(coldEmailResult.rows[0].total || '0');
-    const coldEmailResponses = parseInt(coldEmailResult.rows[0].responses || '0');
+    const coldEmailsSent = parseInt(coldEmailResult.rows[0]?.total || '0');
+    const coldEmailResponses = parseInt(coldEmailResult.rows[0]?.responses || '0');
     const coldEmailConversionRate = coldEmailsSent > 0
       ? Math.round((coldEmailResponses / coldEmailsSent) * 100 * 100) / 100
       : 0;
+    
+    logger.info(`Cold emails stats for user ${userId}: sent=${coldEmailsSent}, responses=${coldEmailResponses}, rate=${coldEmailConversionRate}%`);
 
     return res.json({
       period: days,

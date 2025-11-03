@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [timeRange, setTimeRange] = useState('30');
   const [loading, setLoading] = useState(true);
   const [applications, setApplications] = useState<any[]>([]);
+  const [showAIModal, setShowAIModal] = useState(false);
   const [stats, setStats] = useState({
     totalApplications: 0,
     weeklyApplications: 0,
@@ -342,11 +343,18 @@ export default function Dashboard() {
                 <motion.button
                   onClick={() => {
                     window.open('https://www.linkedin.com/my-items/saved-jobs/', '_blank');
-                    toast.success('📋 Go to LinkedIn → Switch to "Applied" tab → Click Extension → Click "Capture My Applied Jobs"', { duration: 6000 });
+                    toast.success('📋 Go to LinkedIn → Switch to "Applied" tab → Click Extension → Click "Capture My Applied Jobs"', { 
+                      duration: 6000,
+                      style: {
+                        background: '#000',
+                        color: '#fff',
+                        fontWeight: 'bold',
+                      },
+                    });
                   }}
-                  whileHover={{ scale: 1.05, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
+                  whileHover={{ scale: 1.05, boxShadow: '0 10px 30px rgba(0,0,0,0.3)', y: -2 }}
                   whileTap={{ scale: 0.95 }}
-                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+                  className="px-6 py-3 bg-black text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2 border-2 border-gray-200"
                 >
                   <span className="text-xl">📥</span>
                   Import from LinkedIn
@@ -360,16 +368,18 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6"
+              className="bg-white border-4 border-black rounded-xl p-6 shadow-lg"
             >
               <div className="flex items-start gap-4">
-                <div className="text-4xl">🚀</div>
+                <div className="flex-shrink-0 w-14 h-14 bg-black rounded-lg flex items-center justify-center">
+                  <span className="text-3xl">🚀</span>
+                </div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Import Your LinkedIn Jobs in 3 Clicks!</h3>
-                  <div className="space-y-1 text-gray-700">
-                    <p><strong>1.</strong> Click the blue "Import from LinkedIn" button above</p>
-                    <p><strong>2.</strong> On LinkedIn, click the Chrome extension icon</p>
-                    <p><strong>3.</strong> Click "📥 Capture My Applied Jobs" and done! All jobs sync here automatically</p>
+                  <h3 className="text-xl font-bold text-black mb-2">Import Your LinkedIn Jobs in 3 Clicks!</h3>
+                  <div className="space-y-2 text-gray-700">
+                    <p><strong className="text-black">1.</strong> Click the "Import from LinkedIn" button above</p>
+                    <p><strong className="text-black">2.</strong> On LinkedIn, click the Chrome extension icon</p>
+                    <p><strong className="text-black">3.</strong> Click "📥 Capture My Applied Jobs" and done! All jobs sync here automatically</p>
                   </div>
                 </div>
               </div>
@@ -900,17 +910,198 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Add Application FAB */}
+        {/* AI Features FAB */}
         <motion.button
-          onClick={() => toast.success('Add application feature coming soon!')}
+          onClick={() => setShowAIModal(true)}
           whileHover={{ scale: 1.1, rotate: 90 }}
           whileTap={{ scale: 0.9 }}
-          className="fixed bottom-8 right-8 bg-black text-white p-6 rounded-full shadow-2xl z-50"
+          className="fixed bottom-8 right-8 bg-black text-white p-6 rounded-full shadow-2xl z-50 border-2 border-gray-200"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
           </svg>
         </motion.button>
+
+        {/* AI Features Modal */}
+        {showAIModal && (
+          <div 
+            className="fixed inset-0 bg-black/70 backdrop-blur-md z-[60] flex items-center justify-center p-4"
+            onClick={() => setShowAIModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-4xl w-full relative border-4 border-black"
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setShowAIModal(false)}
+                className="absolute top-6 right-6 text-gray-400 hover:text-black transition z-10"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Header - Black background */}
+              <div className="bg-black text-white px-8 py-10 border-b-4 border-gray-200">
+                <motion.div
+                  initial={{ y: -20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <h2 className="text-4xl font-bold mb-2">AI-Powered Features</h2>
+                  <p className="text-gray-300 text-lg">Enterprise-grade AI tools for your job search</p>
+                </motion.div>
+              </div>
+
+              {/* AI Features Grid */}
+              <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* AI Agentic Scraping */}
+                <GlassCard className="p-6 cursor-pointer" depth="medium">
+                  <motion.button
+                    whileHover={{ y: -3, boxShadow: "0 15px 30px rgba(0,0,0,0.15)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowAIModal(false);
+                      toast.success('AI Agentic Scraping - Coming Soon!', { 
+                        duration: 4000,
+                        icon: '🤖',
+                        style: {
+                          background: '#000',
+                          color: '#fff',
+                          fontWeight: 'bold',
+                        },
+                      });
+                    }}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className="flex-shrink-0 w-12 h-12 bg-black rounded-lg flex items-center justify-center">
+                        <span className="text-2xl">🤖</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-black mb-2">AI AGENTIC SCRAPING</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          Autonomous AI agents that automatically find, scrape, and apply to relevant jobs 24/7
+                        </p>
+                      </div>
+                    </div>
+                  </motion.button>
+                </GlassCard>
+
+                {/* Connect to GPTs */}
+                <GlassCard className="p-6 cursor-pointer" depth="medium">
+                  <motion.button
+                    whileHover={{ y: -3, boxShadow: "0 15px 30px rgba(0,0,0,0.15)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowAIModal(false);
+                      toast.success('Connect to Your GPTs - Coming Soon!', { 
+                        duration: 4000,
+                        icon: '🔗',
+                        style: {
+                          background: '#000',
+                          color: '#fff',
+                          fontWeight: 'bold',
+                        },
+                      });
+                    }}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className="flex-shrink-0 w-12 h-12 bg-black rounded-lg flex items-center justify-center">
+                        <span className="text-2xl">🔗</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-black mb-2">CONNECT TO YOUR GPTS</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          Seamless integration with ChatGPT and custom GPTs for enhanced AI assistance
+                        </p>
+                      </div>
+                    </div>
+                  </motion.button>
+                </GlassCard>
+
+                {/* AI Assistant */}
+                <GlassCard className="p-6 cursor-pointer" depth="medium">
+                  <motion.button
+                    whileHover={{ y: -3, boxShadow: "0 15px 30px rgba(0,0,0,0.15)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowAIModal(false);
+                      toast.success('AI Assistant - Coming Soon!', { 
+                        duration: 4000,
+                        icon: '🧠',
+                        style: {
+                          background: '#000',
+                          color: '#fff',
+                          fontWeight: 'bold',
+                        },
+                      });
+                    }}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className="flex-shrink-0 w-12 h-12 bg-black rounded-lg flex items-center justify-center">
+                        <span className="text-2xl">🧠</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-black mb-2">AI ASSISTANT</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          Personalized job recommendations, CV optimization, and strategic career insights
+                        </p>
+                      </div>
+                    </div>
+                  </motion.button>
+                </GlassCard>
+
+                {/* AI Chatbot */}
+                <GlassCard className="p-6 cursor-pointer" depth="medium">
+                  <motion.button
+                    whileHover={{ y: -3, boxShadow: "0 15px 30px rgba(0,0,0,0.15)" }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowAIModal(false);
+                      toast.success('AI Support Chatbots - Coming Soon!', { 
+                        duration: 4000,
+                        icon: '💬',
+                        style: {
+                          background: '#000',
+                          color: '#fff',
+                          fontWeight: 'bold',
+                        },
+                      });
+                    }}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className="flex-shrink-0 w-12 h-12 bg-black rounded-lg flex items-center justify-center">
+                        <span className="text-2xl">💬</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-black mb-2">AI SUPPORT CHATBOTS</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          Intelligent conversational AI to optimize your applications and interview prep
+                        </p>
+                      </div>
+                    </div>
+                  </motion.button>
+                </GlassCard>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-8 py-4 border-t-2 border-gray-200">
+                <p className="text-sm text-gray-600 text-center">
+                  <span className="font-semibold text-black">⚡ Coming Soon:</span> These enterprise-grade AI features are currently in development
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     </>
   );
