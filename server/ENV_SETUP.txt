@@ -1,0 +1,35 @@
+===============================================
+  DATABASE CONFIGURATION NEEDED
+===============================================
+
+The backend needs database credentials. You have two options:
+
+OPTION 1: Create .env file (RECOMMENDED)
+----------------------------------------
+Create a file named ".env" in the server/ directory with:
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=jobtracker
+DB_USER=postgres
+DB_PASSWORD=YOUR_PASSWORD_HERE
+PORT=3001
+NODE_ENV=development
+JWT_SECRET=uk-job-tracker-secret-key-2025-production-safe
+ALLOWED_ORIGINS=http://localhost:3000
+
+Replace YOUR_PASSWORD_HERE with your PostgreSQL password!
+
+OPTION 2: Use Docker (EASIEST)
+-------------------------------
+Open Docker Desktop, then run:
+cd "files (1)/job-tracker-mvp-v2/job-tracker-mvp"
+docker-compose up -d
+
+This will start PostgreSQL with password "postgres" automatically.
+
+===============================================
+After setting up, restart the backend:
+cd "files (1)/job-tracker-mvp-v2/job-tracker-mvp/server"
+npm run dev
+

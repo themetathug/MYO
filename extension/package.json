@@ -1,0 +1,18 @@
+{
+  "name": "uk-jobs-insider-tracker-extension",
+  "version": "1.0.0",
+  "description": "Chrome extension for UK Jobs Insider Job Tracker",
+  "main": "background.js",
+  "scripts": {
+    "build": "echo 'No build step required for extension'"
+  },
+  "keywords": [
+    "chrome-extension",
+    "job-tracker",
+    "career"
+  ],
+  "author": "UK Jobs Insider",
+  "license": "UNLICENSED",
+  "dependencies": {}
+}
+

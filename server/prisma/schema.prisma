@@ -1,0 +1,212 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String        @id @default(uuid())
+  email             String        @unique
+  passwordHash      String
+  firstName         String?
+  lastName          String?
+  profileData       Json?         // Flexible schema for user preferences
+  subscription      SubscriptionTier @default(FREE)
+  weeklyTarget      Int           @default(10)
+  monthlyTarget     Int           @default(40)
+  consentTracking   Boolean       @default(false)
+  consentAnalytics  Boolean       @default(false)
+  encryptedPII      String?       // Encrypted personal data
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  lastActiveAt      DateTime?
+  
+  applications      Application[]
+  cvVersions        CVVersion[]
+  coldEmails        ColdEmail[]
+  sessions          Session[]
+  analytics         UserAnalytics[]
+  streaks           Streak[]
+  
+  @@index([email])
+  @@index([createdAt])
+}
+
+model Application {
+  id                String        @id @default(uuid())
+  userId            String
+  company           String
+  position          String
+  location          String?
+  jobBoardSource    String?       // LinkedIn, Indeed, etc.
+  jobUrl            String?
+  salary            String?       // Stored as string for flexibility
+  status            ApplicationStatus @default(APPLIED)
+  cvVersionId       String?
+  coverLetter       Boolean       @default(false)
+  notes             String?
+  customFields      Json?         // Flexible additional data
+  
+  // Time tracking
+  timeSpent         Int?          // Time in seconds
+  appliedAt         DateTime      @default(now())
+  responseDate      DateTime?
+  interviewDate     DateTime?
+  
+  // Metadata
+  captureMethod     CaptureMethod @default(MANUAL)
+  confidence        Float?        // AI confidence score for auto-capture
+  metadata          Json?
+  
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvVersion         CVVersion?    @relation(fields: [cvVersionId], references: [id])
+  events            ApplicationEvent[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([appliedAt])
+  @@index([company])
+}
+
+model CVVersion {
+  id                String        @id @default(uuid())
+  userId            String
+  name              String
+  fileName          String?
+  version           Int           @default(1)
+  isActive          Boolean       @default(false)
+  conversionRate    Float?        // Calculated metric
+  totalApplications Int           @default(0)
+  successfulApps    Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications      Application[]
+  
+  @@unique([userId, name, version])
+  @@index([userId])
+}
+
+model ColdEmail {
+  id                String        @id @default(uuid())
+  userId            String
+  recipientCompany  String
+  recipientEmail    String?
+  recipientName     String?
+  subject           String?
+  sentAt            DateTime      @default(now())
+  responseReceived  Boolean       @default(false)
+  responseDate      DateTime?
+  ledToInterview    Boolean       @default(false)
+  
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([sentAt])
+}
+
+model ApplicationEvent {
+  id                String        @id @default(uuid())
+  applicationId     String
+  eventType         EventType
+  timestamp         DateTime      @default(now())
+  data              Json?
+  
+  application       Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  @@index([applicationId])
+  @@index([eventType])
+  @@index([timestamp])
+}
+
+model Session {
+  id                String        @id @default(uuid())
+  userId            String
+  token             String        @unique
+  userAgent         String?
+  ipAddress         String?
+  expiresAt         DateTime
+  createdAt         DateTime      @default(now())
+  
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([userId])
+}
+
+model UserAnalytics {
+  id                String        @id @default(uuid())
+  userId            String
+  date              DateTime      @db.Date
+  applicationsCount Int           @default(0)
+  avgTimePerApp     Float?        // In seconds
+  coldEmailsSent    Int           @default(0)
+  responses         Int           @default(0)
+  interviews        Int           @default(0)
+  targetAchievement Float?        // Percentage
+  topSource         String?
+  peakHour          Int?          // 0-23
+  
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+model Streak {
+  id                String        @id @default(uuid())
+  userId            String
+  startDate         DateTime
+  endDate           DateTime?
+  currentDays       Int           @default(1)
+  longestDays       Int           @default(1)
+  isActive          Boolean       @default(true)
+  
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+// Enums
+enum SubscriptionTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum ApplicationStatus {
+  APPLIED
+  VIEWED
+  SHORTLISTED
+  INTERVIEW_SCHEDULED
+  INTERVIEWED
+  OFFERED
+  REJECTED
+  WITHDRAWN
+  ACCEPTED
+}
+
+enum CaptureMethod {
+  MANUAL
+  EXTENSION
+  EMAIL_SYNC
+  API
+}
+
+enum EventType {
+  APPLICATION_CREATED
+  STATUS_CHANGED
+  CV_UPLOADED
+  NOTES_ADDED
+  INTERVIEW_SCHEDULED
+  RESPONSE_RECEIVED
+  FOLLOW_UP_SENT
+}
