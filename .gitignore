@@ -6,6 +6,7 @@ dist/
 *password*.txt
 Gmail APP password.txt
 *.db
+*.zip
 
 # Next.js build files
 .next/
