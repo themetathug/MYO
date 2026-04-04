@@ -1,3 +1,7 @@
+# MYO
+
+World first intellectual job tracker.
+
 # UK Job Tracker - Professional Job Application Manager
 
 A full-stack job tracking platform with AI-powered insights, automated scraping, and beautiful 3D glassmorphism UI.
