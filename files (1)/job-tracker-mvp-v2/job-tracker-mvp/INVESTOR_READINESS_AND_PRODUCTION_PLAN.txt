@@ -1,0 +1,156 @@
+UK Job Tracker
+Investor Readiness and Production Plan
+Date: 2026-02-19
+
+Executive intent
+Build a reliable AI-assisted job tracking product where user activity is captured by extension, persisted in backend and database, reflected in dashboard in near real time, and expanded with resume performance intelligence and email-driven automatic status updates.
+
+Current system status
+1. Core authentication exists and is integrated across frontend and backend.
+2. Extension to backend tracking endpoint is implemented via applications track-session flow.
+3. Backend persists tracking metadata including totalTimeSeconds and activeTime.
+4. Dashboard applications page reads and displays tracked data and polls for updates.
+5. Email monitoring and ghosting detection services exist and are scheduled in backend startup.
+6. Notification APIs and UI exist and are integrated.
+7. CV versions data model and user routes for CV version records exist.
+8. Several legacy AI matching services were removed from active service layer and need replacement wiring before resume intelligence can be productized.
+
+What is still required to be fully complete and production ready
+1. End-to-end reliability hardening
+   Ensure one application submit creates or updates one canonical application record, no duplicates across URL step changes.
+   Ensure extension token sync is deterministic on all target environments and ports.
+   Add idempotency key for tracking events using user_id plus sessionId plus normalized_url.
+   Add backend guardrail against repeated form_submit updates within short window.
+
+2. Resume effectiveness intelligence
+   Product requirement
+   Tell user which resume version works better for interviews and outcomes and whether to update resume.
+
+   Required implementation
+   Add explicit resume selection at apply time in extension or dashboard quick-apply flow.
+   Persist cv_version_id on application consistently.
+   Build scoring job that computes per CV version:
+   application_count
+   interview_rate
+   offer_rate
+   rejection_rate
+   median_response_days
+   weighted_resume_score
+   Expose API endpoint for CV performance insights.
+   Add dashboard panel:
+   Best performing resume
+   Underperforming resume
+   Recommended resume changes based on failed stage patterns.
+
+   Recommendation engine logic
+   If interview_rate of CV A is significantly lower than user baseline then recommend update.
+   If response lag is high and rejection keywords cluster around role-fit then recommend targeting edits.
+   If one CV has strong conversion in role family X then recommend using that CV for similar roles.
+
+3. Email to dashboard automatic interview updates
+   Product requirement
+   If interview email arrives, application status must auto-update in dashboard.
+
+   Current assets already present
+   Email monitor service
+   AI status detection service
+   Notification service
+   Calendar integration service
+
+   Required completion work
+   Ensure user email settings onboarding and credentials flow is reliable and validated.
+   Guarantee matcher logic links email to exact application using company domain plus subject plus recency rules.
+   Add status confidence threshold policy:
+   high confidence updates status automatically
+   medium confidence creates review queue item
+   low confidence does not auto-update
+   Write status update history to timeline and expose in UI.
+   Add user-facing audit log showing source email and status decision reason.
+
+4. Product completeness gaps
+   Build artifacts and TypeScript build currently need a strict clean pass for production quality.
+   Remove old backup pages and stale dashboard variants to reduce maintenance risk.
+   Add deterministic migration strategy and startup check to avoid missing-table runtime issues.
+   Add robust empty states and retry UX for notifications and tracking sync failures.
+
+5. Security and compliance
+   Rotate secrets and remove all development defaults.
+   Enforce strict CORS allowlist for production domains only.
+   Set secure cookie and token policy including expiry and refresh flow.
+   Encrypt stored sensitive email integration secrets at rest.
+   Add privacy policy and data retention policy for tracking and email metadata.
+
+6. Observability and operational readiness
+   Add centralized error monitoring for frontend backend extension.
+   Add structured logs with trace ids for session tracking pipeline.
+   Add health checks and alerting for API DB queue and cron jobs.
+   Add database backups with restore drill.
+   Add rate and latency dashboards for key endpoints.
+
+7. Test plan required before launch
+   Critical acceptance tests
+   user login and session refresh
+   extension tracking from application start to submit on multi-step ATS flow
+   data appears on applications page within expected sync window
+   queued tracking sync succeeds after re-authentication
+   email interview update changes status automatically
+   CV performance panel shows updated metrics after new applications
+
+   Non-functional tests
+   API load smoke test
+   browser compatibility test on target Chrome versions
+   restart resilience test for containers and cron jobs
+
+Production rollout plan
+Phase 1 Stabilization
+Duration 5 to 7 days
+Lock scope to core tracking and dashboard experience.
+Close all P0 and P1 reliability bugs.
+Achieve clean backend and frontend production builds.
+
+Phase 2 Intelligence feature completion
+Duration 7 to 10 days
+Deliver CV performance scoring pipeline and dashboard insights.
+Deliver automatic interview status update with confidence controls and audit history.
+
+Phase 3 Hardening and release
+Duration 3 to 5 days
+Security hardening
+Monitoring and alerting
+Staging soak test
+Go-live checklist signoff
+
+Investor-facing KPI targets for first release
+Tracking capture success rate above 98 percent
+Duplicate application event rate below 1 percent
+Median extension submit-to-dashboard visibility under 10 seconds
+Email status auto-update precision above 95 percent on high-confidence events
+Resume recommendation adoption rate above 30 percent among active users
+
+One page go-live checklist
+1. Environment and secrets configured for production
+2. Migrations verified on clean production-like database
+3. Monitoring dashboards and alerts active
+4. Backup and restore tested
+5. Release candidate passed acceptance tests
+6. Rollback plan tested
+7. Extension production build packaged and versioned
+8. Final legal and privacy pages published
+9. Incident ownership and on-call contacts confirmed
+10. Investor demo script validated on staging and production
+
+Immediate next sprint tasks
+1. Implement idempotent tracking key and duplicate suppression at backend.
+2. Add cv_version_id capture in extension payload and backend route validation.
+3. Build CV performance analytics endpoint and dashboard widget.
+4. Finalize email status confidence policy and review queue.
+5. Complete strict production build cleanup and remove stale pages.
+6. Add telemetry for tracking pipeline and sync failures.
+
+Definition of done for full feature completion
+A user can apply with selected resume version.
+The system tracks full elapsed apply time from first form interaction to final submit.
+The application record appears in dashboard with exact tracked time and selected resume version.
+Interview emails automatically update status in dashboard with notification and history trail.
+Dashboard recommends resume updates based on measured conversion outcomes.
+System runs with production-grade security, monitoring, backup, and rollback.

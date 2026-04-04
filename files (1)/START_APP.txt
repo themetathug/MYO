@@ -1,0 +1,32 @@
+INSTRUCTIONS TO START THE APPLICATION:
+
+1. Open PowerShell in the project folder:
+   cd "files (1)/job-tracker-mvp-v2/job-tracker-mvp/client"
+
+2. Run:
+   npm run dev
+
+3. Wait for:
+   ✓ Ready in X seconds
+   ✓ Compiled successfully
+
+4. Open browser to:
+   http://localhost:3000
+
+5. Test the application:
+   - Landing page with 3D effects
+   - Login with demo@ukjobsinsider.com / Demo123!
+   - Dashboard with all metrics
+   - Services page with architecture
+
+ALL FEATURES IMPLEMENTED:
+✅ 3D Glassmorphism Design
+✅ Custom Cursor
+✅ Particle Background
+✅ Framer Motion Animations
+✅ All Pages Updated (Black/White Theme)
+✅ Services Page with Real Integration Info
+✅ Dashboard with All 11 Metrics
+✅ Smooth 60fps Animations
+✅ Interactive Elements
+
