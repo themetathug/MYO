@@ -73,13 +73,16 @@ app.use(helmet({
     },
   },
 }));
-// CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002',
-  'http://localhost:3003'
-];
+// CORS configuration — Render/docs often use CORS_ORIGIN; we accept both names
+const originsEnv = process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN;
+const allowedOrigins = originsEnv
+  ? originsEnv.split(',').map((o) => o.trim()).filter(Boolean)
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003',
+    ];
 
 // Allow Chrome extensions and LinkedIn (for development)
 app.use(cors({
@@ -185,7 +188,7 @@ async function startServer() {
     server.listen(port, () => {
       logger.info(`🚀 Server is running on port ${port}`);
       logger.info(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`🔒 CORS enabled for: ${process.env.ALLOWED_ORIGINS || 'http://localhost:3000'}`);
+      logger.info(`🔒 CORS allowed origins: ${originsEnv || 'default (localhost ports)'}`);
     });
 
     // Handle server errors (fallback in case port becomes unavailable between check and listen)
