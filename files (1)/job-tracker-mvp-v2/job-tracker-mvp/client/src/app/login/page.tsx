@@ -28,10 +28,14 @@ export default function LoginPage() {
     const bootstrap = async () => {
       if (!localStorage.getItem('user')) return;
       try {
-        await authAPI.refresh();
+        const data = await authAPI.refresh();
+        if (data?.token) {
+          localStorage.setItem('token', data.token);
+        }
         router.push('/dashboard');
       } catch {
         localStorage.removeItem('user');
+        localStorage.removeItem('token');
       }
     };
     bootstrap();
@@ -43,7 +47,8 @@ export default function LoginPage() {
 
     try {
       localStorage.removeItem('user');
-      
+      localStorage.removeItem('token');
+
       const data = await authAPI.login(formData);
 
       if (data.user) {

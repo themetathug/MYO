@@ -1,13 +1,23 @@
 // API service for backend communication
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-let refreshInFlight: Promise<any> | null = null;
+let refreshInFlight: Promise<unknown> | null = null;
+
+function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('token');
+}
 
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}, allowRetry: boolean = true) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
+
+  const token = getAuthToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const url = `${API_BASE_URL}${endpoint}`;
   let response: Response;
@@ -26,7 +36,15 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}, allowR
       if (allowRetry) {
         if (!refreshInFlight) {
           refreshInFlight = fetchPublic('/api/auth/refresh', { method: 'POST' })
-            .finally(() => { refreshInFlight = null; });
+            .then((data: { token?: string }) => {
+              if (data?.token && typeof window !== 'undefined') {
+                localStorage.setItem('token', data.token);
+              }
+              return data;
+            })
+            .finally(() => {
+              refreshInFlight = null;
+            });
         }
         try {
           await refreshInFlight;
@@ -72,10 +90,15 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}, allowR
 }
 
 async function fetchPublic(endpoint: string, options: RequestInit = {}) {
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string> | undefined),
   };
+
+  const token = getAuthToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const url = `${API_BASE_URL}${endpoint}`;
   let response: Response;
