@@ -3,6 +3,24 @@ import { Pool, type PoolConfig } from 'pg';
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
+/**
+ * pg treats any non-URL string as a connection string and may resolve hostname "base"
+ * if DATABASE_URL was set to the placeholder `base`. Prisma also needs a real URL.
+ */
+function assertValidDatabaseUrlIfSet(): void {
+  const raw = process.env.DATABASE_URL?.trim();
+  if (!raw) return;
+  if (!/^postgres(ql)?:\/\//i.test(raw)) {
+    throw new Error(
+      'Invalid DATABASE_URL: must start with postgresql:// or postgres:// (full connection string). ' +
+        'On Render: open your PostgreSQL service → Connect → copy Internal Database URL or External Database URL. ' +
+        'Do not use placeholders like "base".'
+    );
+  }
+}
+
+assertValidDatabaseUrlIfSet();
+
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
 export const prisma =
@@ -16,7 +34,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 function buildPoolConfig(): PoolConfig {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
   const base = {
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
@@ -35,9 +53,11 @@ function buildPoolConfig(): PoolConfig {
     };
   }
 
+  const host = process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost';
+
   return {
     ...base,
-    host: process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost',
+    host,
     port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432', 10),
     database: process.env.DB_NAME || process.env.POSTGRES_DB || 'jobtracker',
     user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
