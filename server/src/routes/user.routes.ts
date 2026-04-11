@@ -14,7 +14,7 @@ const updateProfileSchema = z.object({
   lastName: z.string().optional(),
   weeklyTarget: z.number().min(1).max(100).optional(),
   monthlyTarget: z.number().min(1).max(500).optional(),
-  profileData: z.record(z.any()).optional(),
+  profileData: z.record(z.string(), z.unknown()).optional(),
 });
 
 const updatePreferencesSchema = z.object({
@@ -234,6 +234,10 @@ router.get('/cv-versions', async (req, res) => {
 router.post('/cv-versions', async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const { name, fileName, isActive } = req.body;
 
     // If setting as active, deactivate other versions

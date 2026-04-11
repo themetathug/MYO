@@ -162,8 +162,10 @@ router.post('/predict-success', async (req, res) => {
 
     // Calculate previous success rate
     const totalApps = await prisma.application.count({
-      where: { userId },
-      where: { appliedAt: { lte: application.appliedAt } },
+      where: {
+        userId,
+        appliedAt: { lte: application.appliedAt },
+      },
     });
 
     const successfulApps = totalApps > 0
@@ -199,7 +201,7 @@ router.post('/predict-success', async (req, res) => {
  * Check Python ML service health
  * GET /api/ml-analytics/health
  */
-router.get('/health', async (req, res) => {
+router.get('/health', async (_req, res) => {
   try {
     const isHealthy = await PythonMLService.healthCheck();
     
@@ -253,11 +255,17 @@ router.get('/insights', async (req, res) => {
     // Calculate insights
     const insights = {
       totalApplications: applications.length,
-      averageTimePerApp: applications.reduce((sum, app) => sum + (app.timeSpent || 0), 0) / applications.length,
-      bestPerformingCV: cvVersions.reduce((best, cv) => 
-        (cv.conversionRate || 0) > (best.conversionRate || 0) ? cv : best,
-        cvVersions[0]
-      ),
+      averageTimePerApp:
+        applications.length > 0
+          ? applications.reduce((sum, app) => sum + (app.timeSpent || 0), 0) / applications.length
+          : 0,
+      bestPerformingCV:
+        cvVersions.length > 0
+          ? cvVersions.reduce((best, cv) =>
+              (cv.conversionRate || 0) > (best.conversionRate || 0) ? cv : best,
+              cvVersions[0]
+            )
+          : null,
       recommendation: '',
     };
 

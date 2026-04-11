@@ -112,7 +112,8 @@ router.post('/parse', validateRequest(parseEmailsSchema), async (req, res) => {
     });
   } catch (error: any) {
     logger.error('Error parsing emails:', error);
-    const isGmail = config.host.includes('gmail');
+    const host = typeof req.body?.host === 'string' ? req.body.host : '';
+    const isGmail = host.includes('gmail');
     const errorMessage = error.message || 'Unable to parse emails. Please check your email configuration.';
     const hasAppPasswordError = errorMessage.includes('Application-specific password') || errorMessage.includes('App Password');
     

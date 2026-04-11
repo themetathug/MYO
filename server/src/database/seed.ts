@@ -141,7 +141,7 @@ async function main() {
     data: {
       userId: user.id,
       currentDays: Math.floor(Math.random() * 10 + 1),
-      longestStreak: 12,
+      longestDays: 12,
       isActive: true,
       startDate: new Date(now.getTime() - Math.random() * 10 * 24 * 60 * 60 * 1000),
     },
@@ -154,15 +154,22 @@ async function main() {
   const responded = applications.filter(app => app.responseDate).length;
   const interviewed = applications.filter(app => ['INTERVIEW_SCHEDULED', 'INTERVIEWED', 'OFFERED', 'ACCEPTED'].includes(app.status)).length;
 
+  const avgSeconds = Math.round(
+    applications.reduce((sum, app) => sum + (app.timeSpent || 0), 0) / Math.max(totalApplications, 1)
+  );
+
   await prisma.userAnalytics.create({
     data: {
       userId: user.id,
-      totalApplications,
-      totalInterviews: interviewed,
-      totalOffers: applications.filter(app => ['OFFERED', 'ACCEPTED'].includes(app.status)).length,
-      averageTimePerApplication: Math.round(applications.reduce((sum, app) => sum + (app.timeSpent || 0), 0) / applications.length),
-      responseRate: (responded / totalApplications) * 100,
-      interviewRate: (interviewed / totalApplications) * 100,
+      date: new Date(),
+      applicationsCount: totalApplications,
+      responses: responded,
+      interviews: interviewed,
+      avgTimePerApp: avgSeconds,
+      coldEmailsSent: 0,
+      targetAchievement: totalApplications > 0 ? (responded / totalApplications) * 100 : null,
+      topSource: 'LinkedIn',
+      peakHour: 14,
     },
   });
 

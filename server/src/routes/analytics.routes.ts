@@ -1,8 +1,6 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { prisma } from '../database/client';
 import { logger } from '../utils/logger';
-import { validateQuery } from '../middleware/validation.middleware';
 import { CacheService } from '../services/redis.service';
 
 const router = Router();
@@ -180,7 +178,10 @@ router.get('/dashboard', async (req, res) => {
     }, {} as Record<number, number>);
 
     const peakApplicationTime = Object.entries(timeDistribution).reduce(
-      (max, [hour, count]) => (count > max.count ? { hour: parseInt(hour), count } : max),
+      (max, [hour, count]) => {
+        const n = Number(count);
+        return n > max.count ? { hour: parseInt(hour, 10), count: n } : max;
+      },
       { hour: 0, count: 0 }
     ).hour;
 

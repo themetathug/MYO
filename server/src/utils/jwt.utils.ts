@@ -1,7 +1,7 @@
-import jwt from 'jsonwebtoken';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { logger } from './logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'development-secret-key';
+const JWT_SECRET: Secret = process.env.JWT_SECRET || 'development-secret-key';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface TokenPayload {
@@ -17,11 +17,12 @@ export function generateToken(userId: string, additionalPayload?: Partial<TokenP
       ...additionalPayload,
     };
 
-    const token = jwt.sign(payload, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN,
+    const options: SignOptions = {
+      expiresIn: JWT_EXPIRES_IN as SignOptions['expiresIn'],
       issuer: 'uk-jobs-insider',
       audience: 'job-tracker',
-    });
+    };
+    const token = jwt.sign(payload, JWT_SECRET, options);
 
     return token;
   } catch (error) {
@@ -38,13 +39,13 @@ export function verifyToken(token: string): TokenPayload | null {
     }) as TokenPayload;
 
     return decoded;
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof jwt.TokenExpiredError) {
       logger.debug('Token expired:', error.message);
     } else if (error instanceof jwt.JsonWebTokenError) {
       logger.debug('Invalid token:', error.message);
     } else {
-      logger.error('Token verification error:', error);
+      logger.error('Token verification error:', error instanceof Error ? error.message : String(error));
     }
     return null;
   }

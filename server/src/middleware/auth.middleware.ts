@@ -101,7 +101,7 @@ export async function authMiddleware(
 // Optional auth middleware (doesn't require auth but adds user if token present)
 export async function optionalAuthMiddleware(
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) {
   const token = req.headers.authorization?.replace('Bearer ', '');

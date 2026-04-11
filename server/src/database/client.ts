@@ -1,7 +1,21 @@
-import { Pool } from 'pg';
+/// <reference types="node" />
+import { Pool, type PoolConfig } from 'pg';
+import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
-function buildPoolConfig(): ConstructorParameters<typeof Pool>[0] {
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
+
+function buildPoolConfig(): PoolConfig {
   const databaseUrl = process.env.DATABASE_URL;
   const base = {
     connectionTimeoutMillis: 10000,
