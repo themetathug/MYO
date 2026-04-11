@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { notificationsAPI } from '../lib/api';
 import toast from 'react-hot-toast';
@@ -46,7 +47,10 @@ export function NotificationBell({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const inDropdown = dropdownRef.current?.contains(target);
+      const inButton = buttonRef.current?.contains(target);
+      if (!inDropdown && !inButton) {
         setIsOpen(false);
       }
     };
@@ -168,8 +172,97 @@ export function NotificationBell({
     }
   };
 
+  const dropdownContent = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+          className={`${
+            dropdownAlign === 'outside-right' ? 'fixed' : 'absolute'
+          } ${
+            dropdownAlign === 'left'
+              ? 'left-0'
+              : dropdownAlign === 'outside-right'
+              ? ''
+              : 'right-0'
+          } mt-2 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border-2 border-gray-200 dark:border-gray-700 max-h-[600px] flex flex-col transition-colors`}
+          style={{
+            zIndex: 99999,
+            ...(dropdownAlign === 'outside-right'
+              ? { top: fixedDropdownPosition.top, left: fixedDropdownPosition.left }
+              : {}),
+          }}
+          ref={dropdownAlign === 'outside-right' ? dropdownRef : undefined}
+        >
+          <div className="p-4 border-b-2 border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-black dark:text-white transition-colors">
+              Notifications
+            </h3>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                disabled={loading}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium disabled:opacity-50"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
+
+          <div className="overflow-y-auto flex-1">
+            {notifications.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="text-4xl mb-2">🔔</div>
+                <p className="text-gray-600 dark:text-gray-400">No notifications</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                {notifications.map((notification) => (
+                  <motion.div
+                    key={notification.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    onClick={() => handleNotificationClick(notification)}
+                    className={`p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                      !notification.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
+                    }`}
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div className="text-2xl">{getNotificationIcon(notification.type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`text-sm ${
+                            !notification.read
+                              ? 'font-semibold text-black dark:text-white'
+                              : 'text-gray-700 dark:text-gray-300'
+                          } transition-colors`}
+                        >
+                          {notification.message}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {new Date(notification.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      {!notification.read && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1"></div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const usePortal = dropdownAlign === 'outside-right';
+
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={`relative ${className}`} ref={usePortal ? undefined : dropdownRef}>
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
@@ -200,88 +293,9 @@ export function NotificationBell({
         )}
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            className={`${
-              dropdownAlign === 'outside-right' ? 'fixed' : 'absolute'
-            } ${
-              dropdownAlign === 'left'
-                ? 'left-0'
-                : dropdownAlign === 'outside-right'
-                ? ''
-                : 'right-0'
-            } mt-2 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border-2 border-gray-200 dark:border-gray-700 z-50 max-h-[600px] flex flex-col transition-colors`}
-            style={
-              dropdownAlign === 'outside-right'
-                ? { top: fixedDropdownPosition.top, left: fixedDropdownPosition.left }
-                : undefined
-            }
-          >
-            <div className="p-4 border-b-2 border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-black dark:text-white transition-colors">
-                Notifications
-              </h3>
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllAsRead}
-                  disabled={loading}
-                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium disabled:opacity-50"
-                >
-                  Mark all as read
-                </button>
-              )}
-            </div>
-
-            <div className="overflow-y-auto flex-1">
-              {notifications.length === 0 ? (
-                <div className="p-8 text-center">
-                  <div className="text-4xl mb-2">🔔</div>
-                  <p className="text-gray-600 dark:text-gray-400">No notifications</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {notifications.map((notification) => (
-                    <motion.div
-                      key={notification.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      onClick={() => handleNotificationClick(notification)}
-                      className={`p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                        !notification.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
-                      }`}
-                    >
-                      <div className="flex items-start space-x-3">
-                        <div className="text-2xl">{getNotificationIcon(notification.type)}</div>
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className={`text-sm ${
-                              !notification.read
-                                ? 'font-semibold text-black dark:text-white'
-                                : 'text-gray-700 dark:text-gray-300'
-                            } transition-colors`}
-                          >
-                            {notification.message}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {new Date(notification.created_at).toLocaleString()}
-                          </p>
-                        </div>
-                        {!notification.read && (
-                          <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1"></div>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {usePortal && typeof document !== 'undefined'
+        ? createPortal(dropdownContent, document.body)
+        : dropdownContent}
     </div>
   );
 }

@@ -11,8 +11,38 @@ chrome.runtime.onInstalled.addListener(() => {
     syncEnabled: false,
   });
   
+  // Re-inject timer on all open tabs so users don't need to manually refresh
+  injectTimerOnAllTabs();
+  
   console.log('Extension installed successfully');
 });
+
+// Also re-inject when service worker starts (covers browser restart / extension reload)
+injectTimerOnAllTabs();
+
+async function injectTimerOnAllTabs() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) continue;
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
+          tab.url.startsWith('about:') || tab.url.startsWith('edge://') ||
+          tab.url.startsWith('https://chrome.google.com')) continue;
+      try {
+        // Inject ONLY the tiny timer.js — fast, safe, independent
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['timer.js'],
+        });
+        console.log('✅ Injected timer.js on tab', tab.id, tab.url.substring(0, 60));
+      } catch (e) {
+        // Tab might be restricted — ignore
+      }
+    }
+  } catch (e) {
+    console.warn('Could not inject timer:', e);
+  }
+}
 
 async function syncAuthTokenFromFrontendTab() {
   try {

@@ -21,75 +21,152 @@ document.addEventListener('DOMContentLoaded', async () => {
   const stopTimerBtn = document.getElementById('stop-timer');
   const saveButton = document.getElementById('save-button');
   const resetButton = document.getElementById('reset-button');
+
+  // Guard against partial/failed popup DOM rendering.
+  if (
+    !jobForm || !loading || !errorMessage || !successMessage || !notOnJobPage ||
+    !companyInput || !positionInput || !locationInput || !salaryInput || !sourceInput || !urlInput || !notesInput ||
+    !timeDisplay || !startTimerBtn || !stopTimerBtn || !saveButton || !resetButton
+  ) {
+    console.error('Popup initialization failed: required DOM elements are missing.');
+    return;
+  }
   
   let currentJob = null;
   let timeSpent = 0;
   let timerInterval = null;
   let startTime = null;
   
-  // Sync auth token from frontend localStorage
+  // Sync auth token from frontend
   async function syncAuthToken() {
     try {
-      // Method 1: Try to get token from the frontend app tab (check multiple ports)
-      // Query for all localhost tabs with common ports
+      const { apiUrl: storedApiUrl } = await chrome.storage.local.get(['apiUrl']);
+      const apiUrl = storedApiUrl || 'http://localhost:3001';
+
       const allTabs = await chrome.tabs.query({});
-      const tabs = allTabs.filter(tab => 
-        tab.url && (
-          tab.url.includes('localhost:3000') || 
-          (tab.url && (tab.url.includes('localhost:3001') || tab.url.includes('127.0.0.1:3001'))) || 
-          tab.url.includes('localhost:3002') || 
-          tab.url.includes('localhost:3003')
+      const tabs = allTabs
+        .filter(tab =>
+          tab.url && (
+            tab.url.includes('localhost:3000') ||
+            tab.url.includes('localhost:3001') ||
+            tab.url.includes('127.0.0.1:3000') ||
+            tab.url.includes('127.0.0.1:3001') ||
+            tab.url.includes('localhost:3002') ||
+            tab.url.includes('localhost:3003')
+          )
         )
-      );
-      if (tabs.length > 0) {
+        .sort((a, b) => {
+          const score = (url = '') =>
+            (url.includes('/dashboard') ? 3 : 0) +
+            (url.includes('/login') ? 2 : 0) +
+            (url.includes('localhost:3000') ? 1 : 0);
+          return score(b.url || '') - score(a.url || '');
+        });
+
+      if (tabs.length === 0) {
+        console.log('⚠️ No dashboard tabs found');
+        return false;
+      }
+
+      // Method 1: Read token from localStorage from any candidate tab
+      for (const tab of tabs) {
         try {
-          // Inject script to read localStorage
           const results = await chrome.scripting.executeScript({
-            target: { tabId: tabs[0].id },
+            target: { tabId: tab.id },
             func: () => {
               try {
                 return localStorage.getItem('token');
-              } catch (e) {
+              } catch {
                 return null;
               }
             }
           });
-          
-          if (results && results[0] && results[0].result) {
-            const token = results[0].result;
-            if (token && token !== 'null' && token !== 'undefined' && token.length > 10) {
-              await chrome.storage.local.set({ token });
-              console.log('✅ Token synced to extension from frontend tab');
-              return true;
-            }
-          }
-        } catch (e) {
-          console.log('⚠️ Could not inject script, trying message passing...', e.message);
-        }
-      }
-      
-      // Method 2: Send message to content script on frontend tab
-      if (tabs.length > 0) {
-        try {
-          const response = await new Promise((resolve) => {
-            chrome.tabs.sendMessage(tabs[0].id, { action: 'getToken' }, (response) => {
-              resolve(response);
-            });
-          });
-          
-          if (response && response.token && response.token !== 'null' && response.token.length > 10) {
-            await chrome.storage.local.set({ token: response.token });
-            console.log('✅ Token synced via message');
+          const token = results?.[0]?.result;
+          if (token && token !== 'null' && token !== 'undefined' && token.length > 10) {
+            await chrome.storage.local.set({ token });
+            console.log('✅ Token synced from localStorage');
             return true;
           }
         } catch (e) {
-          console.log('⚠️ Content script not loaded, will sync on next page load');
+          console.log('⚠️ Could not read localStorage on tab:', tab.id, e?.message || e);
         }
       }
-      
+
+      // Method 2: Refresh from any candidate tab context (uses HTTP-only cookies)
+      for (const tab of tabs) {
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: (apiBase) => {
+              return fetch(`${apiBase}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+              })
+                .then(r => (r.ok ? r.json() : null))
+                .then(data => {
+                  if (data && data.token) {
+                    try {
+                      localStorage.setItem('token', data.token);
+                    } catch {
+                      // Ignore storage errors in page context.
+                    }
+                    return data.token;
+                  }
+                  return null;
+                })
+                .catch(() => null);
+            },
+            args: [apiUrl]
+          });
+          const token = results?.[0]?.result;
+          if (token && token.length > 10) {
+            await chrome.storage.local.set({ token });
+            console.log('✅ Token synced via refresh endpoint');
+            return true;
+          }
+        } catch (e) {
+          console.log('⚠️ Refresh sync failed on tab:', tab.id, e?.message || e);
+        }
+      }
+
+      // Method 3: Message content script in any candidate tab
+      for (const tab of tabs) {
+        try {
+          const response = await new Promise((resolve) => {
+            chrome.tabs.sendMessage(tab.id, { action: 'getToken' }, (res) => {
+              resolve(res);
+            });
+          });
+          if (response?.token && response.token !== 'null' && response.token.length > 10) {
+            await chrome.storage.local.set({ token: response.token });
+            console.log('✅ Token synced via content script message');
+            return true;
+          }
+        } catch {
+          // Move to next tab.
+        }
+      }
+
+      // Method 4: Ask background worker to sync too
+      try {
+        const bgResponse = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ action: 'syncAuthToken' }, (res) => resolve(res));
+        });
+        if (bgResponse?.success) {
+          const { token } = await chrome.storage.local.get(['token']);
+          if (token && token.length > 10) {
+            console.log('✅ Token synced via background worker');
+            return true;
+          }
+        }
+      } catch {
+        // Ignore and fall through.
+      }
+
       return false;
     } catch (error) {
-      console.log('⚠️ Could not sync token:', error.message);
+      console.log('⚠️ Could not sync token:', error?.message || error);
       return false;
     }
   }
@@ -104,7 +181,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       tokenStatus.className = 'status success';
       tokenStatus.classList.remove('hidden');
     } else {
-      tokenStatus.textContent = '⚠️ Not authenticated - Click "Sync Token" button below';
+      tokenStatus.textContent = '⚠️ Not authenticated - attempting auto sync...';
       tokenStatus.className = 'status error';
       tokenStatus.classList.remove('hidden');
     }
@@ -129,7 +206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Manual token sync button handler — now issues a dedicated extension token.
+  // Manual token sync button handler
   async function handleSyncToken() {
     const tokenStatus = document.getElementById('token-status');
     const successMessage = document.getElementById('success-message');
@@ -138,56 +215,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     tokenStatus.className = 'status info';
     tokenStatus.classList.remove('hidden');
 
-    // Determine API URL from stored config or default
-    const { apiUrl: storedApiUrl } = await chrome.storage.local.get(['apiUrl']);
-    const apiUrl = storedApiUrl || 'http://localhost:3001';
-
-    // First, try to get a proper dedicated extension token
-    let extensionToken = await fetchExtensionToken(apiUrl);
-
-    // Fallback: legacy localStorage sync for backwards compat during transition
-    if (!extensionToken) {
-      const synced = await syncAuthToken();
-      if (synced) {
-        tokenStatus.textContent = '✅ Token synced (legacy mode)';
-        tokenStatus.className = 'status success';
-        return;
-      }
-      // Show a clear, actionable error — no silent failure
-      tokenStatus.textContent = '❌ Not logged in. Open your dashboard, log in, then click Sync here.';
-      tokenStatus.className = 'status error';
-      tokenStatus.classList.remove('hidden');
+    // Primary method: sync from dashboard tab (localStorage or refresh cookie)
+    const synced = await syncAuthToken();
+    if (synced) {
+      tokenStatus.textContent = '✅ Authenticated - Ready to save jobs!';
+      tokenStatus.className = 'status success';
       if (successMessage) {
-        successMessage.textContent = '';
-        successMessage.classList.add('hidden');
+        successMessage.textContent = '✅ Token synced from dashboard!';
+        successMessage.classList.remove('hidden');
+        setTimeout(() => successMessage.classList.add('hidden'), 3000);
       }
-      // Open dashboard login tab automatically so user can log in
-      try {
-        const { apiUrl: storedUrl } = await chrome.storage.local.get(['apiUrl']);
-        const dashboardUrl = (storedUrl || 'http://localhost:3001').replace(':3001', ':3000') + '/login';
-        await chrome.tabs.create({ url: dashboardUrl, active: true });
-      } catch { /* tabs API unavailable in some contexts */ }
       return;
     }
 
-    await chrome.storage.local.set({ token: extensionToken, tokenType: 'extension' });
-    tokenStatus.textContent = '✅ Extension token issued — works across all environments!';
-    tokenStatus.className = 'status success';
-    if (successMessage) {
-      successMessage.textContent = '✅ Authenticated with dedicated extension token.';
-      successMessage.classList.remove('hidden');
-      setTimeout(() => successMessage.classList.add('hidden'), 3000);
+    // Fallback: try the extension-token endpoint
+    const { apiUrl: storedApiUrl } = await chrome.storage.local.get(['apiUrl']);
+    const apiUrl = storedApiUrl || 'http://localhost:3001';
+    const extensionToken = await fetchExtensionToken(apiUrl);
+    if (extensionToken) {
+      await chrome.storage.local.set({ token: extensionToken, tokenType: 'extension' });
+      tokenStatus.textContent = '✅ Authenticated - Ready to save jobs!';
+      tokenStatus.className = 'status success';
+      if (successMessage) {
+        successMessage.textContent = '✅ Extension token issued!';
+        successMessage.classList.remove('hidden');
+        setTimeout(() => successMessage.classList.add('hidden'), 3000);
+      }
+      return;
     }
+
+    // All methods failed
+    tokenStatus.textContent = '❌ Please open your dashboard (localhost:3000), log in, then click Sync again.';
+    tokenStatus.className = 'status error';
+    tokenStatus.classList.remove('hidden');
+    if (successMessage) {
+      successMessage.textContent = '';
+      successMessage.classList.add('hidden');
+    }
+    // Open dashboard login tab so user can log in
+    try {
+      const dashboardUrl = (apiUrl).replace(':3001', ':3000') + '/login';
+      await chrome.tabs.create({ url: dashboardUrl, active: true });
+    } catch { /* tabs API unavailable */ }
   }
 
   // Load current tab and try to capture job
   async function initialize() {
     try {
-      // Show token status
-      await showTokenStatus();
-      
-      // Sync token first
+      // Sync token first so we do not show stale "Not authenticated" status.
       await syncAuthToken();
+      await showTokenStatus();
       
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
@@ -350,6 +427,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveButton.disabled = true;
     saveButton.textContent = 'Saving...';
     
+    // timeSpent is in seconds (from the setInterval timer)
+    const timeSpentSeconds = timeSpent > 0 ? timeSpent : undefined;
+    const timeSpentMinutes = timeSpentSeconds ? Math.max(1, Math.round(timeSpentSeconds / 60)) : undefined;
+
     const applicationData = {
       company: companyInput.value,
       position: positionInput.value,
@@ -358,7 +439,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       jobBoardSource: sourceInput.value || undefined,
       jobUrl: urlInput.value || undefined,
       notes: notesInput.value || undefined,
-      timeSpent: timeSpent || undefined,
+      timeSpent: timeSpentMinutes,         // backend expects minutes
+      timeSpentSeconds: timeSpentSeconds,  // also send raw seconds for precision
       captureMethod: 'EXTENSION',
       appliedAt: new Date().toISOString(),
     };

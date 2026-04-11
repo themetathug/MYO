@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { CustomCursor } from '../../../components/CustomCursor';
@@ -9,6 +10,7 @@ import { GlassCard } from '../../../components/GlassCard';
 import { authAPI } from '../../../lib/api';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [darkMode, setDarkMode] = useState(false);
   const [email, setEmail] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -105,7 +107,7 @@ export default function SettingsPage() {
               
               <div className="flex space-x-6">
                 <button 
-                  onClick={() => window.location.href = '/dashboard'}
+                  onClick={() => router.push('/dashboard')}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white font-medium transition"
                 >
                   Dashboard
@@ -120,7 +122,8 @@ export default function SettingsPage() {
               onClick={() => {
                 authAPI.logout().catch(() => undefined).finally(() => {
                   localStorage.removeItem('user');
-                  window.location.href = '/login';
+                  localStorage.removeItem('token');
+                  router.push('/login');
                 });
               }}
               className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition"

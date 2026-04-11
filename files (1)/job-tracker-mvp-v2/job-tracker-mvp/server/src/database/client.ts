@@ -3,17 +3,33 @@ import { logger } from '../utils/logger';
 import fs from 'fs';
 import path from 'path';
 
+const DATABASE_URL = process.env.DATABASE_URL;
+
+const poolConfig = DATABASE_URL
+  ? {
+      connectionString: DATABASE_URL,
+      ssl: DATABASE_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : false,
+    }
+  : {
+      host:     process.env.DB_HOST     || process.env.POSTGRES_HOST     || 'localhost',
+      port:     parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432'),
+      database: process.env.DB_NAME     || process.env.POSTGRES_DB       || 'jobtracker',
+      user:     process.env.DB_USER     || process.env.POSTGRES_USER     || 'postgres',
+      password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'postgres',
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    };
+
 export const pool = new Pool({
-  host:     process.env.DB_HOST     || process.env.POSTGRES_HOST     || 'localhost',
-  port:     parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432'),
-  database: process.env.DB_NAME     || process.env.POSTGRES_DB       || 'jobtracker',
-  user:     process.env.DB_USER     || process.env.POSTGRES_USER     || 'postgres',
-  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'postgres',
+  ...poolConfig,
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis:       30000,
-  max: 20,
-  min:  5,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 10,
+  min:  1,
+  allowExitOnIdle: true,
+});
+
+pool.on('error', (err) => {
+  logger.error('Unexpected pool error:', err.message);
 });
 
 export async function initializeDatabase(): Promise<void> {

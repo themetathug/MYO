@@ -1,11 +1,190 @@
 // UK Jobs Insider - Enhanced Content Script
-// Improved LinkedIn scraping with 2025 selectors
 
-// Prevent multiple injections
-if (typeof window.ukJobTrackerLoaded !== 'undefined') {
-  console.log('⚠️ UK Job Tracker: Script already loaded, skipping...');
+// ============================================================================
+// SIMPLE TIME TRACKER — runs FIRST, independently, zero dependencies
+// Just URL matching → floating timer → save on leave. Bulletproof.
+// ============================================================================
+(function() {
+  'use strict';
+  const TAG = '[UKJT-Timer]';
+
+  // Already running on this page?
+  if (window.__ukjtTimerActive) return;
+
+  const host = location.hostname.toLowerCase();
+  const path = location.pathname.toLowerCase();
+  const url  = location.href.toLowerCase();
+
+  // Skip internal pages
+  if (host === 'localhost' || host === '127.0.0.1') return;
+  if (host.includes('chrome-extension')) return;
+  const skip = ['google.com','youtube.com','facebook.com','twitter.com','instagram.com','reddit.com','wikipedia.org','github.com','stackoverflow.com'];
+  if (skip.some(s => host === s || host.endsWith('.' + s))) return;
+
+  // ── URL MATCHING: does this look like a job/career/apply page? ──
+  let matched = false;
+  let reason = '';
+
+  // ATS platforms — always track
+  const ats = ['myworkdayjobs.com','workday.com','greenhouse.io','lever.co','ashbyhq.com',
+    'jobvite.com','workable.com','smartrecruiters.com','icims.com','taleo.net',
+    'brassring.com','bamboohr.com','recruitee.com','teamtailor.com','jazzhr.com',
+    'applytojob.com','pinpointhq.com','personio.com','dover.com','comeet.co','hirevue.com'];
+  if (ats.some(d => host.includes(d))) { matched = true; reason = 'ATS platform'; }
+
+  // Job boards
+  const boards = ['linkedin.com','indeed.com','indeed.co.uk','reed.co.uk','totaljobs.com',
+    'glassdoor.com','glassdoor.co.uk','monster.com','monster.co.uk','cv-library.co.uk',
+    'ziprecruiter.com','dice.com','cwjobs.co.uk','adzuna.co.uk','amazon.jobs'];
+  if (!matched && boards.some(d => host.includes(d))) { matched = true; reason = 'Job board'; }
+
+  // Any site with /apply, /application, /careers/*, /jobs/* in path
+  if (!matched && /\/(apply|application|apply-now|job-application|submit-application)(\/|$|\?|#)/i.test(path)) { matched = true; reason = '/apply path'; }
+  if (!matched && /^\/(careers?|jobs?|positions?|openings?|vacancies?|hiring|join-us|work-with-us)\/.+/i.test(path)) { matched = true; reason = 'Career subpath'; }
+
+  // Company career domains (e.g. careers.company.com, jobs.company.com)
+  if (!matched && /^(careers?|jobs?|apply|hiring)\./i.test(host)) { matched = true; reason = 'Career subdomain'; }
+
+  if (!matched) return; // Not a job page — bail silently
+
+  console.log(`${TAG} ✅ Job page detected (${reason}): ${host}${path.substring(0, 50)}`);
+  window.__ukjtTimerActive = true;
+
+  // ── TIMER STATE ──
+  const startTime = Date.now();
+  let activeSeconds = 0;
+  let paused = false;
+  let timerInterval = null;
+
+  // ── FLOATING INDICATOR ──
+  const indicator = document.createElement('div');
+  indicator.id = 'ukjt-simple-timer';
+  indicator.style.cssText = `
+    position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
+    padding: 10px 16px; border-radius: 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff; font: 600 14px/1 system-ui, -apple-system, sans-serif;
+    box-shadow: 0 4px 20px rgba(102,126,234,0.5);
+    display: flex; align-items: center; gap: 8px;
+    transition: opacity 0.3s; cursor: default; user-select: none;
+  `;
+  const dot = document.createElement('span');
+  dot.style.cssText = 'width:8px;height:8px;background:#10b981;border-radius:50%;animation:ukjtPulse 2s infinite;';
+  const timeSpan = document.createElement('span');
+  timeSpan.textContent = 'Tracking: 0:00';
+  indicator.appendChild(dot);
+  indicator.appendChild(timeSpan);
+
+  // Pulse animation
+  const style = document.createElement('style');
+  style.textContent = '@keyframes ukjtPulse{0%,100%{opacity:1}50%{opacity:.4}}';
+  document.head.appendChild(style);
+
+  // Append once DOM is ready
+  function mount() {
+    if (document.body && !document.getElementById('ukjt-simple-timer')) {
+      document.body.appendChild(indicator);
+      console.log(`${TAG} ⏱️ Timer indicator mounted`);
+    }
+  }
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount);
+
+  // ── TICK ──
+  timerInterval = setInterval(() => {
+    if (!paused) {
+      activeSeconds++;
+      const m = Math.floor(activeSeconds / 60);
+      const s = activeSeconds % 60;
+      timeSpan.textContent = `Tracking: ${m}:${String(s).padStart(2, '0')}`;
+    }
+  }, 1000);
+
+  // ── PAUSE on hidden / idle ──
+  document.addEventListener('visibilitychange', () => { paused = document.hidden; });
+  let idleTimer = null;
+  const resetIdle = () => {
+    paused = false;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { paused = true; }, 120000); // 2 min idle
+  };
+  ['mousedown','keydown','scroll','click','touchstart'].forEach(e =>
+    document.addEventListener(e, resetIdle, { passive: true })
+  );
+  resetIdle();
+
+  // ── SAVE on unload ──
+  function saveSession() {
+    if (activeSeconds < 3) return; // Too short, ignore
+    const sessionData = {
+      url: location.href,
+      startTime,
+      endTime: Date.now(),
+      totalTimeSeconds: Math.round((Date.now() - startTime) / 1000),
+      activeTime: activeSeconds,
+      trigger: 'tab_closed',
+      sessionId: 'timer_' + startTime + '_' + Math.random().toString(36).substr(2, 6),
+      jobData: {
+        company: document.querySelector('[data-company],[itemprop="hiringOrganization"] [itemprop="name"],.company-name,.employer-name')?.textContent?.trim()
+          || host.replace(/^(www\.|jobs\.|careers\.|apply\.)/i,'').replace(/\.(com|co\.uk|org|io|net|myworkdayjobs).*$/i,'').split('.')[0].replace(/^./,c=>c.toUpperCase())
+          || null,
+        position: document.querySelector('h1,.job-title,[data-testid="job-title"]')?.textContent?.trim()?.substring(0, 150) || null,
+        location: null,
+        salary: null,
+        jobBoardSource: reason.includes('ATS') ? 'ATS' : (boards.find(d => host.includes(d)) || 'Direct'),
+      },
+    };
+    console.log(`${TAG} 💾 Saving session: ${activeSeconds}s active on ${host}`);
+    try {
+      chrome.storage.local.get(['pendingApplications'], (res) => {
+        const queue = res.pendingApplications || [];
+        queue.push({ ...sessionData, queuedAt: Date.now() });
+        if (queue.length > 50) queue.splice(0, queue.length - 50);
+        chrome.storage.local.set({ pendingApplications: queue });
+      });
+    } catch (e) {
+      console.warn(`${TAG} Could not queue session:`, e);
+    }
+    // Also try direct save
+    try {
+      chrome.storage.local.get(['token', 'apiUrl'], (res) => {
+        const token = res.token;
+        const apiUrl = res.apiUrl || 'http://localhost:3001';
+        if (!token) return;
+        fetch(`${apiUrl}/api/applications/track-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(sessionData),
+        }).then(r => {
+          if (r.ok) console.log(`${TAG} ✅ Session saved to backend`);
+          else console.warn(`${TAG} ❌ Backend returned ${r.status}`);
+        }).catch(() => {});
+      });
+    } catch (e) { /* ignore */ }
+  }
+
+  window.addEventListener('beforeunload', saveSession);
+  // Also save periodically (every 60s) in case browser crashes
+  setInterval(() => {
+    if (activeSeconds > 10) saveSession();
+  }, 60000);
+
+  console.log(`${TAG} 🟢 Simple timer started for: ${host}`);
+})();
+// ============================================================================
+// END OF SIMPLE TIME TRACKER
+// ============================================================================
+
+// Allow re-injection after extension reload.
+const _UKJT_VERSION = Date.now();
+if (window._ukjtVersion && (Date.now() - window._ukjtVersion) < 2000) {
+  console.log('⚠️ UK Job Tracker: Script injected <2s ago, skipping duplicate');
 } else {
-  window.ukJobTrackerLoaded = true;
+  window._ukjtVersion = _UKJT_VERSION;
+  if (window._ukjtApplicationTracker) {
+    try { window._ukjtApplicationTracker.cleanup(); } catch {}
+    window._ukjtApplicationTracker = null;
+  }
 
 const SITE_SELECTORS = {
   'linkedin.com': {
@@ -50,9 +229,9 @@ const SITE_SELECTORS = {
       'span[class*="location"]'
     ],
     salary: [
-      '.jobs-unified-top-card__job-insight span:contains("$")',
-      '.jobs-unified-top-card__job-insight span:contains("£")',
-      '.jobs-unified-top-card__job-insight span:contains("€")',
+      '.jobs-unified-top-card__job-insight span',
+      '.salary-main-rail__data-body',
+      '.job-details-jobs-unified-top-card__job-insight--highlight span',
       '.compensation__salary',
       '[data-test-id="job-details-salary"]'
     ],
@@ -107,6 +286,7 @@ class JobCapture {
     this.isTracking = false;
     this.applicationDetected = false;
     this.trackingInterval = null;
+    this._recentAutoCapturedUrls = new Set();
     this.init();
   }
 
@@ -1016,7 +1196,8 @@ class JobCapture {
   }
 
   // Enhanced job capture for regular job detail pages
-  async captureCurrentJob() {
+  // silent=true suppresses notifications (used for auto-captures)
+  async captureCurrentJob(silent = false) {
     try {
       const currentUrl = window.location.href;
       
@@ -1026,18 +1207,27 @@ class JobCapture {
         return this.captureLinkedInMyJobs();
       }
       
-      // Only proceed if we're on an actual job detail page
+      // Broader detection for job detail pages
       const isJobDetailPage = currentUrl.includes('/jobs/view/') || 
-                              currentUrl.includes('/jobs/search/');
+                              currentUrl.includes('/jobs/search/') ||
+                              currentUrl.includes('currentJobId=') ||
+                              currentUrl.match(/\/job\/\d+/) ||
+                              currentUrl.includes('/viewjob');
       
       if (!isJobDetailPage) {
-        // Silently return if not on a job page - don't show errors
-        console.log('ℹ️ Not on a job detail page. Use "Capture My Applied Jobs" button for bulk import.');
+        console.log('ℹ️ Not on a job detail page.');
         return {
           success: false,
-          message: 'Please navigate to a job detail page or use "Capture My Applied Jobs" for bulk import.',
+          message: 'Not on a job detail page.',
           count: 0
         };
+      }
+
+      // Dedup: skip if we already auto-captured this exact URL recently
+      const jobId = this._extractLinkedInJobId(currentUrl) || currentUrl;
+      if (this._recentAutoCapturedUrls.has(jobId)) {
+        console.log('⏭️ Already captured job:', jobId);
+        return { success: true, data: this.currentJob, alreadyCaptured: true };
       }
       
       console.log('🔍 UK Job Tracker: Starting job capture...', currentUrl);
@@ -1051,13 +1241,11 @@ class JobCapture {
 
       console.log('✅ Found selectors for:', hostname);
       
-      // Use silent mode to suppress error messages for selectors
       const company = this.extractText(selectors.company, true);
       const position = this.extractText(selectors.position, true);
       const location = this.extractText(selectors.location, true);
       const salary = this.extractText(selectors.salary, true);
       
-      // Only log if we're on a job detail page and found data
       if (company || position) {
         console.log('📋 Captured data:', {
           company: company || '(not found)',
@@ -1078,15 +1266,9 @@ class JobCapture {
         timestamp: new Date().toISOString()
       };
 
-      // Validate captured data
       if (!jobDetails.company || !jobDetails.position) {
-        // If on "My Jobs" page, don't try fallback - just return silently
         if (currentUrl.includes('/my-items/saved-jobs')) {
-          return {
-            success: false,
-            message: 'Use "Capture My Applied Jobs" button for bulk import.',
-            count: 0
-          };
+          return { success: false, message: 'Use bulk import for My Jobs page.', count: 0 };
         }
         console.warn('⚠️ Missing critical data, trying fallback capture...');
         return this.fallbackCapture(jobDetails);
@@ -1094,8 +1276,17 @@ class JobCapture {
 
       this.currentJob = jobDetails;
 
-      // Show success notification
-      this.showNotification('✅ Job details captured successfully!', 'success');
+      // Track this URL as captured to prevent duplicates
+      this._recentAutoCapturedUrls.add(jobId);
+      // Keep the set from growing indefinitely
+      if (this._recentAutoCapturedUrls.size > 200) {
+        const first = this._recentAutoCapturedUrls.values().next().value;
+        this._recentAutoCapturedUrls.delete(first);
+      }
+
+      if (!silent) {
+        this.showNotification('✅ Job details captured successfully!', 'success');
+      }
 
       // Send to backend
       this.sendToBackend(jobDetails).catch(err => {
@@ -1106,7 +1297,9 @@ class JobCapture {
 
     } catch (error) {
       console.error('❌ Error capturing job:', error);
-      this.showNotification(`❌ Error: ${error.message}`, 'error');
+      if (!silent) {
+        this.showNotification(`❌ Error: ${error.message}`, 'error');
+      }
       return { success: false, error: error.message };
     }
   }
@@ -1151,7 +1344,7 @@ class JobCapture {
         jobUrl: window.location.href,
         jobBoardSource: 'Other',
         notes: `Auto-captured from: ${window.location.hostname}`,
-        captureMethod: 'GENERIC'
+        captureMethod: 'EXTENSION'
       }
     };
   }
@@ -1306,14 +1499,21 @@ class JobCapture {
     return 'Other';
   }
 
-  // Detect if on a job page
+  // Detect if on a job page and auto-capture
   detectJobPage() {
     const url = window.location.href;
     
-    // Check for LinkedIn My Jobs page
+    // Auto-import applied jobs page without needing to click the extension
     if (url.includes('linkedin.com/my-items/saved-jobs') && url.includes('cardType=APPLIED')) {
-      console.log('🎯 LinkedIn Applied Jobs page detected!');
-      this.showNotification('📋 Click extension icon to import all your applied jobs!', 'info');
+      console.log('🎯 LinkedIn Applied Jobs page detected — auto-importing...');
+      this.showNotification('🔄 Auto-importing your applied jobs...', 'info');
+      setTimeout(() => {
+        this.captureLinkedInMyJobs().then(result => {
+          if (result && result.success) {
+            console.log(`✅ Auto-imported ${result.count} applied jobs`);
+          }
+        }).catch(err => console.error('Auto-import failed:', err));
+      }, 2000);
       return;
     }
     
@@ -1325,27 +1525,93 @@ class JobCapture {
       url.includes('currentJobId=');
     
     if (isJobDetailPage) {
-      console.log('✅ Job detail page detected');
-      setTimeout(() => this.captureCurrentJob(), 2000);
+      console.log('✅ Job detail page detected — auto-capturing');
+      setTimeout(() => this.captureCurrentJob(true), 2000);
     }
   }
 
-  // Observe page changes for SPAs
+  // Observe page changes for SPAs (LinkedIn, Indeed, etc.)
   observePageChanges() {
     let lastUrl = window.location.href;
-    
-    const observer = new MutationObserver(() => {
+    const self = this;
+
+    const onUrlChange = () => {
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
+        console.log('🔄 URL changed:', lastUrl.substring(0, 60), '->', currentUrl.substring(0, 60));
         lastUrl = currentUrl;
-        this.detectJobPage();
+        self.detectJobPage();
+      }
+    };
+
+    // Intercept History API so we catch LinkedIn SPA navigations immediately
+    const origPushState = history.pushState;
+    const origReplaceState = history.replaceState;
+    history.pushState = function(...args) {
+      origPushState.apply(this, args);
+      onUrlChange();
+    };
+    history.replaceState = function(...args) {
+      origReplaceState.apply(this, args);
+      onUrlChange();
+    };
+    window.addEventListener('popstate', onUrlChange);
+
+    // Also use MutationObserver as a fallback for edge cases
+    const observer = new MutationObserver(onUrlChange);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // LinkedIn-specific: watch the job detail panel for content changes
+    if (window.location.hostname.includes('linkedin.com')) {
+      this._setupLinkedInJobPanelObserver();
+    }
+  }
+
+  // Watch the LinkedIn right-side job detail panel for new job content
+  _setupLinkedInJobPanelObserver() {
+    const self = this;
+    let lastJobId = this._extractLinkedInJobId(window.location.href);
+    let captureTimer = null;
+
+    const panelObserver = new MutationObserver(() => {
+      const currentJobId = self._extractLinkedInJobId(window.location.href);
+      if (currentJobId && currentJobId !== lastJobId) {
+        lastJobId = currentJobId;
+        if (captureTimer) clearTimeout(captureTimer);
+        captureTimer = setTimeout(() => {
+          console.log('🔍 LinkedIn job panel changed (job ID:', currentJobId, ') — auto-capturing');
+          self.captureCurrentJob(true).then(result => {
+            if (result && result.success && !result.alreadyCaptured) {
+              console.log('✅ Auto-captured job from LinkedIn panel');
+            }
+          }).catch(() => {});
+        }, 2500);
       }
     });
-    
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+
+    // Observe the main content area for panel changes
+    const startObserving = () => {
+      const targetNode = document.querySelector('.jobs-search__job-details') ||
+                         document.querySelector('.scaffold-layout__detail') ||
+                         document.querySelector('[class*="job-details"]') ||
+                         document.getElementById('main');
+      if (targetNode) {
+        panelObserver.observe(targetNode, { childList: true, subtree: true });
+        console.log('👁️ LinkedIn job panel observer active');
+      } else {
+        setTimeout(startObserving, 2000);
+      }
+    };
+    startObserving();
+  }
+
+  // Extract LinkedIn job ID from URL
+  _extractLinkedInJobId(url) {
+    const viewMatch = url.match(/\/jobs\/view\/(\d+)/);
+    if (viewMatch) return viewMatch[1];
+    const paramMatch = url.match(/currentJobId=(\d+)/);
+    if (paramMatch) return paramMatch[1];
+    return null;
   }
 
   // Time tracking methods
@@ -1408,20 +1674,63 @@ class ApplicationTracker {
     this.lastCompletedNormalizedUrl = null;
     this.successDetectionTimer = null;
     
-    // URL patterns for job application pages - GENERIC (works for ANY site)
-    // No hardcoded domains - these patterns work universally
+    // Known job board domains where tracking is valid
+    this.jobBoardDomains = [
+      // Job boards
+      'linkedin.com', 'indeed.com', 'indeed.co.uk', 'reed.co.uk',
+      'totaljobs.com', 'glassdoor.com', 'glassdoor.co.uk', 'monster.co.uk',
+      'cv-library.co.uk', 'cwjobs.co.uk', 'jobsite.co.uk', 'adzuna.co.uk',
+      'ziprecruiter.com', 'dice.com', 'simplyhired.com', 'careerbuilder.com',
+      'monster.com', 'flexjobs.com', 'remoteok.com', 'weworkremotely.com',
+      // ATS platforms (used by most big companies)
+      'workday.com', 'myworkdayjobs.com',   // Netflix, Starbucks, Apple, etc.
+      'lever.co', 'greenhouse.io',
+      'smartrecruiters.com', 'icims.com',
+      'taleo.net', 'brassring.com',
+      'successfactors.com', 'sap.com',
+      'jobvite.com', 'ashbyhq.com',
+      'applytojob.com', 'workable.com',
+      'bamboohr.com', 'bamboohrfiles.com',
+      'paylocity.com', 'rippling.com',
+      'recruitee.com', 'teamtailor.com',
+      'comeet.co', 'pinpointhq.com',
+      'personio.com', 'personio.de',
+      'freshteam.com', 'zohorecruit.com',
+      'dover.com', 'joinhandshake.com',
+      'jazz.co', 'jazzhr.com',
+      'bullhornreach.com', 'ultipro.com',
+      'kronos.com', 'adp.com',
+      'hirevue.com', 'beamery.com',
+      'eightfold.ai', 'seekout.com',
+      // Major company-owned career portals
+      'amazon.jobs', 'careers.google.com',
+      'microsoft.com', 'apple.com',
+      'meta.com', 'netflix.com',
+      'spotify.com', 'airbnb.com',
+    ];
+
+    // URL patterns for job application pages — only on external sites, never localhost
     this.jobPatterns = [
-      /\/jobs?\/.*apply/i,           // Matches: netflix.com/jobs/apply, openai.com/job/apply
-      /\/careers?\/.*apply/i,        // Matches: netflix.com/careers/apply, openai.com/career/apply
-      /\/apply/i,                    // Matches: ANY site with /apply in URL
-      /\/application/i,              // Matches: ANY site with /application in URL
-      /job-application/i,             // Matches: ANY site with job-application
-      /apply-now/i,                  // Matches: ANY site with apply-now
-      /submit-application/i,          // Matches: ANY site with submit-application
-      /\/jobs?\/[^\/]+\/[^\/]+/i,    // Matches: company.com/jobs/12345 (job detail pages)
-      /\/careers?\/[^\/]+\/[^\/]+/i, // Matches: company.com/careers/position-name
-      /\/positions?\/[^\/]+/i,       // Matches: company.com/positions/job-id
-      /\/opportunities?\/[^\/]+/i,   // Matches: company.com/opportunities/job
+      /\/jobs?\/.*apply/i,
+      /\/careers?\/.*apply/i,
+      /\/apply(?:\/|$|\?)/i,
+      /\/job-application/i,
+      /\/apply-now/i,
+      /\/submit-application/i,
+      // Workday-style: /job/Remote-Title/apply/1
+      /\/job\/[^/]+\/apply/i,
+      // Greenhouse-style: /jobs/12345/apply
+      /\/jobs?\/\d+\/apply/i,
+      // Lever-style: /apply/lever-app
+      /lever\.co\/.*\/apply/i,
+      // iCIMS-style
+      /icims\.com.*\/apply/i,
+      // Generic "applicationId" or "jobId" in query params with apply in path
+      /\/application(?:form)?(?:\/|$|\?)/i,
+      // Amazon-style: /jobs/12345/title
+      /amazon\.jobs\/en\/jobs\/\d+/i,
+      // External application forms on any domain with explicit apply signal
+      /[?&](apply|application|jobId|job_id|requisition)=/i,
     ];
     
     // Success page patterns
@@ -1451,36 +1760,65 @@ class ApplicationTracker {
   async init() {
     try {
       // Check if feature is enabled
-      const { autoTrackingEnabled } = await chrome.storage.local.get(['autoTrackingEnabled']);
-      this.isEnabled = autoTrackingEnabled !== false; // Default to enabled
+      let storageResult = {};
+      try {
+        storageResult = await chrome.storage.local.get(['autoTrackingEnabled']);
+      } catch (e) {
+        console.warn('⚠️ chrome.storage not available, continuing with defaults');
+      }
+      this.isEnabled = storageResult.autoTrackingEnabled !== false;
       
       if (!this.isEnabled) {
         console.log('🔴 Auto-tracking disabled');
         return;
       }
 
-      console.log('🟢 ApplicationTracker initializing...');
+      const currentUrl = window.location.href;
+      const hostname = window.location.hostname.toLowerCase();
+      console.log(`🟢 ApplicationTracker initializing on: ${hostname} (${currentUrl.substring(0, 80)}...)`);
       
-      // Check if current page is a job application page (URL-based)
-      if (this.isJobApplicationPage(window.location.href)) {
-        this.startSession(window.location.href);
-      } else {
-        // Also check if page has application form (form-based detection)
-        // This catches career sites that don't have /apply in URL
-        this.checkForApplicationForm();
+      // URL-based detection fires immediately
+      const isJobPage = this.isJobApplicationPage(currentUrl);
+      console.log(`🔍 isJobApplicationPage: ${isJobPage} for ${hostname}`);
+      
+      if (isJobPage) {
+        console.log('🚀 URL matched job application pattern — starting session');
+        this.startSession(currentUrl);
       }
+      // Form/content-based detection always runs as backup
+      this.checkForApplicationForm();
       
-      // Setup all tracking mechanisms (always active)
-      this.trackUserActivity();
-      this.detectFormSubmissions();
-      this.interceptNetworkRequests();
-      this.detectSuccessPages();
-      this.observeURLChanges();
+      // Setup all tracking mechanisms (always active, each wrapped for safety)
+      try { this.trackUserActivity(); } catch (e) { console.warn('trackUserActivity failed:', e); }
+      try { this.detectFormSubmissions(); } catch (e) { console.warn('detectFormSubmissions failed:', e); }
+      try { this.interceptNetworkRequests(); } catch (e) { console.warn('interceptNetworkRequests failed:', e); }
+      try { this.detectSuccessPages(); } catch (e) { console.warn('detectSuccessPages failed:', e); }
+      try { this.observeURLChanges(); } catch (e) { console.warn('observeURLChanges failed:', e); }
+      try { this.detectLinkedInEasyApply(); } catch (e) { console.warn('detectLinkedInEasyApply failed:', e); }
       
       // Listen for messages from background script
       chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === 'getActiveSession') {
           sendResponse({ session: this.currentSession });
+          return true;
+        }
+        if (request.action === 'startAutoTracking') {
+          const targetUrl = request.url || window.location.href;
+          if (this.isJobApplicationPage(targetUrl)) {
+            this.startSession(targetUrl);
+          } else {
+            this.checkForApplicationForm();
+          }
+          sendResponse({ success: true });
+          return true;
+        }
+        if (request.action === 'tabActivated') {
+          if (this.currentSession && this.currentSession.isPaused) {
+            this.currentSession.isPaused = false;
+            this.currentSession.lastActive = Date.now();
+            this.persistSession(this.currentSession);
+          }
+          sendResponse({ success: true });
           return true;
         }
         if (request.action === 'stopTracking') {
@@ -1498,10 +1836,140 @@ class ApplicationTracker {
     }
   }
 
-  // Check if URL matches job application patterns
+  // Check if URL matches job application patterns — works on ANY external website
   isJobApplicationPage(url) {
     if (!url) return false;
-    return this.jobPatterns.some(pattern => pattern.test(url));
+    try {
+      const parsed = new URL(url);
+      const hostname = parsed.hostname.toLowerCase();
+      const pathname = parsed.pathname.toLowerCase();
+      const fullUrl = (pathname + parsed.search).toLowerCase();
+
+      // Never track on internal/system pages
+      if (hostname === 'localhost' || hostname === '127.0.0.1') return false;
+      if (hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('172.')) return false;
+      if (hostname.includes('chrome-extension') || hostname.includes('moz-extension')) return false;
+      // Skip non-career social pages (but allow their job boards)
+      const nonCareerHosts = ['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com', 'reddit.com', 'wikipedia.org', 'stackoverflow.com', 'github.com'];
+      if (nonCareerHosts.some(h => hostname === h || hostname.endsWith('.' + h))) return false;
+
+      // --- SIGNAL 1: Explicit /apply path on ANY external site ---
+      if (/\/apply(?:\/|$|\?|#)/i.test(pathname)) return true;
+      if (/\/apply-now(?:\/|$|\?|#)/i.test(pathname)) return true;
+      if (/\/application(?:form)?(?:\/|$|\?|#)/i.test(pathname)) return true;
+      if (/\/job-application(?:\/|$|\?|#)/i.test(pathname)) return true;
+      if (/\/submit-application(?:\/|$|\?|#)/i.test(pathname)) return true;
+
+      // --- SIGNAL 2: ATS platforms (any subdomain, any company) ---
+      if (hostname.includes('myworkdayjobs.com')) return true;   // Netflix, Apple, Starbucks...
+      if (hostname.includes('greenhouse.io')) return true;
+      if (hostname.includes('lever.co')) return true;
+      if (hostname.includes('ashbyhq.com')) return true;
+      if (hostname.includes('jobvite.com')) return true;
+      if (hostname.includes('workable.com')) return true;
+      if (hostname.includes('smartrecruiters.com')) return true;
+      if (hostname.includes('icims.com')) return true;
+      if (hostname.includes('taleo.net')) return true;
+      if (hostname.includes('brassring.com')) return true;
+      if (hostname.includes('successfactors.com')) return true;
+      if (hostname.includes('bamboohr.com')) return true;
+      if (hostname.includes('paylocity.com')) return true;
+      if (hostname.includes('recruitee.com')) return true;
+      if (hostname.includes('teamtailor.com')) return true;
+      if (hostname.includes('pinpointhq.com')) return true;
+      if (hostname.includes('dover.com')) return true;
+      if (hostname.includes('rippling.com')) return true;
+      if (hostname.includes('applytojob.com')) return true;
+      if (hostname.includes('jazzhr.com')) return true;
+      if (hostname.includes('comeet.co')) return true;
+      if (hostname.includes('personio.com')) return true;
+      if (hostname.includes('workday.com')) return true;
+      if (hostname.includes('amazon.jobs')) return true;
+
+      // --- SIGNAL 3: Career/jobs path that's deep enough (a specific job, not a listing page) ---
+      // e.g. /careers/software-engineer-london or /jobs/12345
+      const pathParts = pathname.split('/').filter(Boolean);
+      const hasCareerBase = /^(careers?|jobs?|positions?|openings?|vacancies?|hiring|work-with-us|join-us|join-our-team|opportunities)$/i.test(pathParts[0]);
+      if (hasCareerBase && pathParts.length >= 2) return true;  // /careers/anything
+
+      // --- SIGNAL 4: Known job boards (general listing sites) ---
+      const isKnownJobBoard = this.jobBoardDomains.some(d => hostname.includes(d));
+      if (isKnownJobBoard) return true;
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  // LinkedIn Easy Apply auto-detection: captures job when user clicks
+  // "Easy Apply", "Submit application", or sees the success confirmation
+  detectLinkedInEasyApply() {
+    if (!window.location.hostname.includes('linkedin.com')) return;
+
+    const self = this;
+    let capturedForUrl = null;
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('button, [role="button"]');
+      if (!btn) return;
+      const text = (btn.textContent || '').trim().toLowerCase();
+      const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+
+      const isEasyApply = text.includes('easy apply') || ariaLabel.includes('easy apply');
+      const isSubmit = text.includes('submit application') || text === 'submit' ||
+                       ariaLabel.includes('submit application');
+      const isDismissSuccess = text.includes('done') && document.querySelector('.artdeco-modal');
+
+      if (isEasyApply) {
+        self.startSession(window.location.href);
+        console.log('🟢 LinkedIn Easy Apply clicked — tracking started');
+      }
+
+      if (isSubmit || isDismissSuccess) {
+        const currentNorm = self.normalizeTrackingUrl(window.location.href);
+        if (capturedForUrl === currentNorm) return;
+        capturedForUrl = currentNorm;
+
+        console.log('✅ LinkedIn application submitted — auto-capturing job');
+        setTimeout(() => {
+          if (typeof jobCapture !== 'undefined' && jobCapture.captureCurrentJob) {
+            jobCapture.captureCurrentJob(false).then(result => {
+              if (result && result.success) {
+                console.log('✅ Job auto-captured after Easy Apply');
+              }
+            }).catch(() => {});
+          }
+          if (self.currentSession) {
+            self.handleApplicationSubmit('form_submit', { url: window.location.href });
+          }
+        }, 1000);
+      }
+    }, true);
+
+    // Also watch for the "Application sent" confirmation in the modal
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          const text = (node.textContent || '').toLowerCase();
+          if (text.includes('application sent') || text.includes('your application was sent')) {
+            const currentNorm = self.normalizeTrackingUrl(window.location.href);
+            if (capturedForUrl === currentNorm) continue;
+            capturedForUrl = currentNorm;
+
+            console.log('✅ LinkedIn "Application sent" detected — auto-capturing');
+            if (typeof jobCapture !== 'undefined' && jobCapture.captureCurrentJob) {
+              jobCapture.captureCurrentJob(false).catch(() => {});
+            }
+            if (self.currentSession) {
+              self.handleApplicationSubmit('success_page', { url: window.location.href });
+            }
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   // Normalize URL so query/hash changes don't restart session
@@ -1514,102 +1982,104 @@ class ApplicationTracker {
     }
   }
 
-  // Check if page has application form (for unknown career sites)
-  // This works for ANY company site, not just known ones
+  // Detect application forms on ANY website — no domain restrictions
   checkForApplicationForm() {
     try {
-      // Wait a bit for page to load
-      setTimeout(() => {
-        const forms = document.querySelectorAll('form');
-        let hasApplicationForm = false;
-        
-        forms.forEach(form => {
-          const inputs = form.querySelectorAll('input, textarea, select');
-          let applicationScore = 0;
-          
-          // Check for common application form fields
-          inputs.forEach(input => {
-            const name = (input.name || input.id || '').toLowerCase();
-            const type = input.type?.toLowerCase() || '';
-            const placeholder = (input.placeholder || '').toLowerCase();
-            
-            // Email field (common in applications)
-            if (type === 'email' || name.includes('email')) {
-              applicationScore += 2;
-            }
-            
-            // File upload (resume/CV)
-            if (type === 'file') {
-              applicationScore += 3;
-              // Check if it's for resume/CV
-              if (name.includes('resume') || name.includes('cv') || 
-                  placeholder.includes('resume') || placeholder.includes('cv')) {
-                applicationScore += 2;
-              }
-            }
-            
-            // Phone field
-            if (type === 'tel' || name.includes('phone')) {
-              applicationScore += 1;
-            }
-            
-            // Name fields
-            if (name.includes('name') || name.includes('first') || name.includes('last')) {
-              applicationScore += 1;
-            }
-            
-            // Address fields
-            if (name.includes('address') || name.includes('city') || name.includes('postcode')) {
-              applicationScore += 1;
-            }
-            
-            // Cover letter
-            if (name.includes('cover') || name.includes('letter') || 
-                placeholder.includes('cover') || placeholder.includes('letter')) {
-              applicationScore += 2;
-            }
-          });
-          
-          // If form has high application score (likely an application form)
-          if (applicationScore >= 5) {
-            hasApplicationForm = true;
-          }
-        });
-        
-        // Also check page text for application keywords
-        const pageText = document.body.innerText.toLowerCase();
-        const hasApplicationKeywords = 
-          pageText.includes('apply') ||
-          pageText.includes('application') ||
-          pageText.includes('submit your application') ||
-          pageText.includes('upload resume') ||
-          pageText.includes('upload cv');
-        
-        // Check URL for career/job indicators
-        const url = window.location.href.toLowerCase();
-        // If we detect application form or keywords, start tracking
-        // IMPORTANT: do not start on generic job listing/search pages.
-        // Require either a strong form signal, or explicit apply/application URL.
-        const explicitApplyUrl =
-          url.includes('/apply') ||
-          url.includes('/application') ||
-          url.includes('job-application') ||
-          url.includes('apply-now');
+      const hostname = window.location.hostname.toLowerCase();
+      if (hostname === 'localhost' || hostname === '127.0.0.1') return;
+      if (hostname.startsWith('192.168.') || hostname.startsWith('10.')) return;
+      if (hostname.includes('chrome-extension') || hostname.includes('moz-extension')) return;
+      // Skip obviously non-career sites
+      const nonCareer = ['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com', 'reddit.com', 'wikipedia.org'];
+      if (nonCareer.some(h => hostname === h || hostname.endsWith('.' + h))) return;
+      if (this.currentSession) return; // Already tracking
 
-        if (hasApplicationForm || (hasApplicationKeywords && explicitApplyUrl)) {
-          const isCareerPage = 
-            url.includes('/career') || 
-            url.includes('/jobs') || 
-            url.includes('/position') ||
-            url.includes('/opportunity') ||
-            url.includes('/hiring');
-          
-          if (isCareerPage && !this.currentSession) {
-            console.log('🔍 Detected application form on career page - starting tracking');
-            this.startSession(window.location.href);
-          }
+      const runDetection = () => {
+        if (this.currentSession) return; // Another mechanism already started
+
+        // --- FORM SCORING ---
+        let bestFormScore = 0;
+        document.querySelectorAll('form').forEach(form => {
+          let score = 0;
+          form.querySelectorAll('input, textarea, select').forEach(input => {
+            const name = (input.name || input.id || input.className || '').toLowerCase();
+            const type = (input.type || '').toLowerCase();
+            const label = (input.placeholder || input.getAttribute('aria-label') || '').toLowerCase();
+            const combined = name + ' ' + label;
+
+            if (type === 'file') score += 4;                                  // File upload = strong signal
+            if (combined.includes('resume') || combined.includes('cv')) score += 4;
+            if (type === 'email' || combined.includes('email')) score += 2;
+            if (type === 'tel' || combined.includes('phone')) score += 2;
+            if (combined.includes('cover') || combined.includes('letter')) score += 3;
+            if (combined.includes('first') || combined.includes('last') || combined.includes('name')) score += 1;
+            if (combined.includes('linkedin') || combined.includes('portfolio') || combined.includes('github')) score += 2;
+            if (combined.includes('salary') || combined.includes('compensation')) score += 2;
+            if (combined.includes('work') && (combined.includes('auth') || combined.includes('visa') || combined.includes('eligib'))) score += 3;
+            if (combined.includes('experience') || combined.includes('years')) score += 1;
+          });
+          if (score > bestFormScore) bestFormScore = score;
+        });
+
+        // --- PAGE TEXT SIGNALS ---
+        const pageText = (document.body?.innerText || '').toLowerCase();
+        const pageTitle = document.title.toLowerCase();
+
+        const strongPageSignals = [
+          'upload your cv', 'upload your resume', 'attach your cv', 'attach your resume',
+          'submit your application', 'complete your application', 'apply for this role',
+          'apply for this job', 'apply for this position', 'submit application',
+          'work authorization', 'right to work', 'sponsorship required',
+          'equal opportunity employer', 'upload resume', 'upload cv',
+        ];
+        const hasStrongPageSignal = strongPageSignals.some(s => pageText.includes(s));
+
+        const softPageSignals = [
+          'apply now', 'apply today', 'application form', 'job application',
+          'cover letter', 'years of experience', 'desired salary',
+          'linkedin profile', 'portfolio url', 'github url',
+        ];
+        const softSignalCount = softPageSignals.filter(s => pageText.includes(s)).length;
+
+        const titleHasJobSignal = /apply|application|career|job|position|role|vacancy/i.test(pageTitle);
+
+        // --- DECISION ---
+        // High form score alone → definitely an application form
+        if (bestFormScore >= 6) {
+          console.log(`🔍 Application form detected (score: ${bestFormScore}) — starting tracking`);
+          this.startSession(window.location.href);
+          return;
         }
-      }, 2000); // Wait 2 seconds for page to load
+
+        // Medium form score + page signals
+        if (bestFormScore >= 3 && (hasStrongPageSignal || softSignalCount >= 2)) {
+          console.log(`🔍 Application form + page signals detected — starting tracking`);
+          this.startSession(window.location.href);
+          return;
+        }
+
+        // Strong page signal (like "upload your cv") even without a traditional form
+        // (some ATS use custom file upload components, not <input type="file">)
+        if (hasStrongPageSignal && titleHasJobSignal) {
+          console.log('🔍 Strong application page signals detected — starting tracking');
+          this.startSession(window.location.href);
+          return;
+        }
+
+        // Multiple soft signals on a job-related page title
+        if (softSignalCount >= 3 && titleHasJobSignal) {
+          console.log('🔍 Multiple soft application signals + job title — starting tracking');
+          this.startSession(window.location.href);
+        }
+      };
+
+      // Run after page content loads (2s for initial load)
+      setTimeout(runDetection, 2000);
+      // Also run again after 5s for slow-loading pages / lazy-rendered ATS forms
+      setTimeout(() => {
+        if (!this.currentSession) runDetection();
+      }, 5000);
+
     } catch (error) {
       console.error('Error checking for application form:', error);
     }
@@ -1812,9 +2282,16 @@ class ApplicationTracker {
         buttonType === 'submit' ||
         buttonText.includes('submit') ||
         buttonText.includes('send application') ||
+        buttonText.includes('apply now') ||
+        buttonText.includes('apply') ||
+        buttonText.includes('continue') ||
+        buttonText.includes('next') ||
+        buttonText.includes('review') ||
         buttonText.includes('complete') ||
         ariaLabel.includes('submit') ||
-        ariaLabel.includes('send application');
+        ariaLabel.includes('send application') ||
+        ariaLabel.includes('apply') ||
+        ariaLabel.includes('continue');
       
       if (isSubmitButton) {
         // If no session and this looks like application button, start tracking
@@ -1830,7 +2307,10 @@ class ApplicationTracker {
         const likelyFinalSubmit =
           buttonText.includes('submit') ||
           buttonText.includes('send application') ||
+          buttonText.includes('apply now') ||
           buttonText.includes('complete application') ||
+          buttonText.includes('application sent') ||
+          buttonText.includes('success') ||
           buttonText.includes('final');
 
         if (this.currentSession && likelyFinalSubmit) {
@@ -1941,16 +2421,23 @@ class ApplicationTracker {
     // Initial check
     this.checkForSuccessPage();
     
-    // Watch for DOM changes
+    // Throttled DOM change watcher (max once per 2s to avoid perf issues on heavy ATS pages)
+    let successCheckPending = false;
     this.successObserver = new MutationObserver(() => {
-      this.checkForSuccessPage();
+      if (successCheckPending) return;
+      successCheckPending = true;
+      setTimeout(() => {
+        successCheckPending = false;
+        this.checkForSuccessPage();
+      }, 2000);
     });
     
-    this.successObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
+    if (document.body) {
+      this.successObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
   }
 
   // Check if current page indicates successful application
@@ -2003,6 +2490,9 @@ class ApplicationTracker {
           if (this.successPatterns.some(pattern => pattern.test(rawCurrentUrl))) {
             this.handleApplicationSubmit('navigation', { url: rawCurrentUrl });
           }
+        } else {
+          // For unknown career sites, also re-run form detection after navigation
+          this.checkForApplicationForm();
         }
       }
     }, 1000);
@@ -2305,6 +2795,40 @@ class ApplicationTracker {
           // Ignore and fallback to queue
         }
       }
+
+      // Fallback: try localStorage token from current page context
+      if (!token) {
+        try {
+          const pageToken = localStorage.getItem('token');
+          if (pageToken && pageToken !== 'null' && pageToken !== 'undefined' && pageToken.length > 10) {
+            token = pageToken;
+            await chrome.storage.local.set({ token: pageToken });
+          }
+        } catch {
+          // Ignore storage access issues
+        }
+      }
+
+      // Fallback: if running on dashboard host, try refresh endpoint to mint new access token
+      if (!token) {
+        try {
+          const apiUrl = await this.getApiUrl();
+          const refreshed = await fetch(`${apiUrl}/api/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (refreshed.ok) {
+            const refreshedData = await refreshed.json();
+            if (refreshedData?.token && refreshedData.token.length > 10) {
+              token = refreshedData.token;
+              await chrome.storage.local.set({ token });
+            }
+          }
+        } catch {
+          // Ignore refresh failures and continue to queue fallback
+        }
+      }
       
       if (!token) {
         console.warn('⚠️ No auth token, queuing application for later');
@@ -2359,6 +2883,7 @@ class ApplicationTracker {
                 if (retryResponse.ok) {
                   const retryResult = await retryResponse.json();
                   console.log('✅ Application saved after token refresh:', retryResult);
+                  this._markSubmit(canonicalUrl);
                   return true;
                 }
               }
@@ -2533,6 +3058,21 @@ class ApplicationTracker {
 
   // Clean up on page unload
   cleanup() {
+    // If user leaves/closes during an active session, persist it as tab_closed.
+    if (this.currentSession && !this.currentSession.completed) {
+      const session = this.currentSession;
+      session.completed = true;
+      session.endTime = Date.now();
+      session.trigger = 'tab_closed';
+      const totalTime = (session.endTime - session.startTime) / 1000;
+      session.totalTimeSeconds = Math.max(1, Math.round(totalTime));
+      if (session.activeTime === 0 && totalTime > 0) {
+        session.activeTime = Math.max(1, Math.floor(totalTime));
+      }
+      this.queueApplication(session).catch(() => {});
+      this.currentSession = null;
+    }
+
     if (this.activeTimeInterval) {
       clearInterval(this.activeTimeInterval);
     }
@@ -2583,11 +3123,11 @@ let applicationTracker = null;
 try {
   if (AUTO_TRACKING_ENABLED) {
     applicationTracker = new ApplicationTracker();
+    window._ukjtApplicationTracker = applicationTracker;
     console.log('✅ ApplicationTracker initialized');
   }
 } catch (error) {
   console.error('❌ ApplicationTracker failed to initialize:', error);
-  // Don't break existing functionality
 }
 
 // Cleanup on page unload
@@ -2597,4 +3137,4 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-} // End of window.ukJobTrackerLoaded guard
+} // End of injection guard

@@ -47,6 +47,9 @@ export default function RegisterPage() {
       
       // Session is managed by httpOnly cookies; keep user profile for UI convenience.
       localStorage.setItem('user', JSON.stringify(data.user));
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
       
       toast.success('Account created successfully! 🎉');
       router.push('/dashboard');

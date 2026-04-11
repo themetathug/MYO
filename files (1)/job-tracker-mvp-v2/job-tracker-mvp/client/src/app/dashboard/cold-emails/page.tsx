@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { coldEmailsAPI, emailParserAPI } from '../../../lib/api';
@@ -9,6 +10,7 @@ import { ParticleBackground } from '../../../components/ParticleBackground';
 import { GlassCard } from '../../../components/GlassCard';
 
 export default function ColdEmailsPage() {
+  const router = useRouter();
   const [coldEmails, setColdEmails] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -212,7 +214,7 @@ export default function ColdEmailsPage() {
               
               <div className="flex space-x-6">
                 <button 
-                  onClick={() => window.location.href = '/dashboard'}
+                  onClick={() => router.push('/dashboard')}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white font-medium transition"
                 >
                   Dashboard

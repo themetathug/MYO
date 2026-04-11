@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { companyContactsAPI, applicationsAPI } from '../../../lib/api';
@@ -18,6 +19,7 @@ interface CompanyContact {
 }
 
 export default function CompanyContactsPage() {
+  const router = useRouter();
   const [contacts, setContacts] = useState<CompanyContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -200,13 +202,13 @@ export default function CompanyContactsPage() {
               
               <div className="flex space-x-6">
                 <button 
-                  onClick={() => window.location.href = '/dashboard'}
+                  onClick={() => router.push('/dashboard')}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white font-medium transition"
                 >
                   Dashboard
                 </button>
                 <button 
-                  onClick={() => window.location.href = '/dashboard/applications'}
+                  onClick={() => router.push('/dashboard/applications')}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white font-medium transition"
                 >
                   Applications

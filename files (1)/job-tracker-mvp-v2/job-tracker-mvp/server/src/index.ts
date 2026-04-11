@@ -334,9 +334,9 @@ app.get('/api/events', (req: any, res: any) => {
     const accessToken = cookies.access_token;
     if (accessToken) {
       try {
-        const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET || 'development-secret-key') as any;
-        userId = decoded.userId;
+        const { verifyToken } = require('./utils/jwt.utils');
+        const decoded = verifyToken(accessToken);
+        if (decoded) userId = decoded.userId;
       } catch { /* invalid token */ }
     }
   }

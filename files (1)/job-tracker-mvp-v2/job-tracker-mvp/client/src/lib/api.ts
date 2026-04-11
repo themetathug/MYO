@@ -38,6 +38,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}, allowR
 
       if (typeof window !== 'undefined') {
         localStorage.removeItem('user');
+        localStorage.removeItem('token');
         if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
           window.location.href = '/login?expired=true';
           return new Promise(() => {});

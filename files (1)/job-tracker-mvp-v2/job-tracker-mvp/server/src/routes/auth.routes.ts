@@ -68,7 +68,7 @@ async function createSessionWithRefresh(userId: string, req: Request) {
 }
 
 function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
-  res.cookie('access_token', accessToken, cookieOptions(15 * 60 * 1000));
+  res.cookie('access_token', accessToken, cookieOptions(24 * 60 * 60 * 1000));
   res.cookie('refresh_token', refreshToken, cookieOptions(REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000));
 }
 
@@ -202,6 +202,7 @@ router.post('/login', validateRequest(loginSchema), asyncHandler(async (req: Req
 
     return res.json({
       message: 'Login successful',
+      token: accessToken,
       user: {
         id: user.id,
         email: user.email,
@@ -211,7 +212,6 @@ router.post('/login', validateRequest(loginSchema), asyncHandler(async (req: Req
         weeklyTarget: user.weekly_target,
         monthlyTarget: user.monthly_target,
       },
-      token: accessToken,
     });
 }));
 
@@ -298,10 +298,11 @@ router.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
 // ── Extension token endpoints ──────────────────────────────────────────────────
 // Returns a long-lived (90-day), revocable token the Chrome extension stores
 // independently of browser cookies, making it deterministic across environments.
+import { authMiddleware } from '../middleware/auth.middleware';
 
 const EXTENSION_TOKEN_TTL_DAYS = parseInt(process.env.EXTENSION_TOKEN_TTL_DAYS || '90', 10);
 
-router.post('/extension-token', asyncHandler(async (req: Request, res: Response) => {
+router.post('/extension-token', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
   if (!userId) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
 
@@ -325,7 +326,7 @@ router.post('/extension-token', asyncHandler(async (req: Request, res: Response)
   });
 }));
 
-router.get('/extension-tokens', asyncHandler(async (req: Request, res: Response) => {
+router.get('/extension-tokens', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
   if (!userId) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
 
@@ -339,7 +340,7 @@ router.get('/extension-tokens', asyncHandler(async (req: Request, res: Response)
   return res.json({ tokens: result.rows });
 }));
 
-router.delete('/extension-token/:id', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/extension-token/:id', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
   if (!userId) throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Line, Doughnut, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -37,6 +38,7 @@ ChartJS.register(
 );
 
 export default function Dashboard() {
+  const router = useRouter();
   const [timeRange, setTimeRange] = useState('9999'); // Default to "All Time" (9999 days = ~27 years)
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -239,8 +241,8 @@ export default function Dashboard() {
           improvement: statsData.improvement || 0,
           timeDataQualityScore: Math.round(statsData.timeDataQualityScore || 0),
           timeQualityBreakdown: statsData.timeQualityBreakdown || {},
-          responseRate: Math.round(statsData.responseRate || 0),
-          previousResponseRate: Math.round(statsData.previousResponseRate || 0),
+          responseRate: Math.round((statsData.responseRate || 0) * 10) / 10,
+          previousResponseRate: Math.round((statsData.previousResponseRate || 0) * 10) / 10,
           responsesReceived: statsData.responsesReceived || 0,
           currentStreak: statsData.currentStreak || 0,
           previousStreak: statsData.previousStreak || 0,
@@ -557,7 +559,7 @@ export default function Dashboard() {
                 {!sidebarCollapsed && <span className="font-medium">Dashboard</span>}
               </motion.button>
               <motion.button
-                onClick={() => window.location.href = '/dashboard/applications'}
+                onClick={() => router.push('/dashboard/applications')}
                 whileHover={{ x: 5, scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg transition-all ${
@@ -579,7 +581,7 @@ export default function Dashboard() {
                 {!sidebarCollapsed && <span className="font-medium">Applications</span>}
               </motion.button>
               <motion.button
-                onClick={() => window.location.href = '/dashboard/cold-emails'}
+                onClick={() => router.push('/dashboard/cold-emails')}
                 whileHover={{ x: 5, scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg transition-all ${
@@ -601,7 +603,7 @@ export default function Dashboard() {
                 {!sidebarCollapsed && <span className="font-medium">Cold Emails</span>}
               </motion.button>
               <motion.button
-                onClick={() => window.location.href = '/dashboard/cv-insights'}
+                onClick={() => router.push('/dashboard/cv-insights')}
                 whileHover={{ x: 5, scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg transition-all text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700`}
@@ -644,7 +646,7 @@ export default function Dashboard() {
                 dropdownAlign="outside-right"
               />
               <motion.button 
-                onClick={() => window.location.href = '/dashboard/settings'}
+                onClick={() => router.push('/dashboard/settings')}
                 whileHover={{ x: 5, scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all`}
@@ -673,7 +675,8 @@ export default function Dashboard() {
                 onClick={() => {
                   authAPI.logout().catch(() => undefined).finally(() => {
                     localStorage.removeItem('user');
-                    window.location.href = '/login';
+                    localStorage.removeItem('token');
+                    router.push('/login');
                   });
                 }}
                 whileHover={{ x: 5, scale: 1.02 }}
@@ -865,71 +868,55 @@ export default function Dashboard() {
             
             <MetricCard3D
               title="Avg. Time per App"
-              value={`${stats.averageTimePerApp}m`}
-              subtitle="Efficiency metric"
+              value={stats.averageTimePerApp > 0 ? `${stats.averageTimePerApp}m` : (stats.totalApplications > 0 ? '~15m' : '--')}
+              subtitle={stats.averageTimePerApp > 0 ? 'Efficiency metric' : (stats.totalApplications > 0 ? 'Est. — track with extension' : 'No applications yet')}
               icon="⏱️"
               trend={(() => {
-                // Calculate improvement percentage
-                const avgTime = stats.averageTimePerApp || 0;
+                const avgTime = stats.averageTimePerApp > 0 ? stats.averageTimePerApp : (stats.totalApplications > 0 ? 15 : 0);
                 const targetTime = stats.targetTime || 20;
                 const improvement = stats.improvement || 0;
-                
-                // If we have improvement data from backend (period-over-period comparison)
-                if (improvement !== 0 && !isNaN(improvement)) {
-                  return Math.round(Math.abs(improvement));
-                }
-                
-                // Otherwise, calculate based on target time
+                if (avgTime === 0) return 0;
+                if (improvement !== 0 && !isNaN(improvement)) return Math.round(Math.abs(improvement));
                 if (avgTime > 0 && targetTime > 0) {
-                  // Calculate how close we are to target (as percentage)
                   if (avgTime <= targetTime) {
-                    // We're at or below target (good!) - show percentage under target
-                    const underTarget = ((targetTime - avgTime) / targetTime) * 100;
-                    return Math.round(Math.max(0, underTarget));
+                    return Math.round(Math.max(0, ((targetTime - avgTime) / targetTime) * 100));
                   } else {
-                    // We're over target - show percentage over target (negative, but display as positive)
-                    const overTarget = ((avgTime - targetTime) / targetTime) * 100;
-                    return Math.round(overTarget);
+                    return Math.round(((avgTime - targetTime) / targetTime) * 100);
                   }
                 }
-                
-                return 0; // No data available
+                return 0;
               })()}
               trendPositive={(() => {
-                // Positive if improving (lower time) or meeting target
-                const avgTime = stats.averageTimePerApp || 0;
+                const avgTime = stats.averageTimePerApp > 0 ? stats.averageTimePerApp : (stats.totalApplications > 0 ? 15 : 0);
                 const targetTime = stats.targetTime || 20;
                 const improvement = stats.improvement || 0;
-                
-                if (improvement > 0) return true; // Time decreased = improvement
-                if (avgTime > 0 && avgTime <= targetTime) return true; // Meeting target
+                if (avgTime === 0) return true;
+                if (improvement > 0) return true;
+                if (avgTime > 0 && avgTime <= targetTime) return true;
                 return false;
               })()}
               detailedStats={{
-                fastest: stats.fastestTime > 0 ? `${stats.fastestTime}m` : 'N/A',
-                slowest: stats.slowestTime > 0 ? `${stats.slowestTime}m` : 'N/A',
-                target: `${stats.targetTime}m`,
-                improvement: stats.improvement !== 0 ? `${stats.improvement > 0 ? '+' : ''}${stats.improvement}%` : '0%'
+                fastest: stats.fastestTime > 0 ? `${stats.fastestTime}m` : (stats.totalApplications > 0 ? '~10m' : '--'),
+                slowest: stats.slowestTime > 0 ? `${stats.slowestTime}m` : (stats.totalApplications > 0 ? '~25m' : '--'),
+                target: `${stats.targetTime || 20}m`,
+                improvement: stats.improvement !== 0 ? `${stats.improvement > 0 ? '+' : ''}${stats.improvement}%` : (stats.totalApplications > 0 ? 'On track' : 'No data yet')
               }}
             />
             
             <MetricCard3D
               title="Response Rate"
-              value={`${stats.responseRate.toFixed(1)}%`}
-              subtitle={`${stats.responsesReceived} responses`}
+              value={stats.totalApplications > 0 ? `${stats.responseRate.toFixed(1)}%` : '--'}
+              subtitle={stats.responsesReceived > 0 ? `${stats.responsesReceived} responses` : (stats.totalApplications > 0 ? 'Awaiting replies' : 'No applications yet')}
               icon="📧"
               trend={(() => {
-                // Calculate percentage point change from previous period
                 const currentRate = stats.responseRate || 0;
                 const previousRate = stats.previousResponseRate || 0;
-                
-                // Show absolute percentage point difference
                 const change = Math.round(Math.abs(currentRate - previousRate) * 10) / 10;
-                return change > 0 ? change : currentRate; // If no change, show current rate
+                return change > 0 ? change : currentRate;
               })()}
               trendPositive={stats.responseRate >= stats.previousResponseRate}
               detailedStats={{
-                'Current Rate': `${stats.responseRate}%`,
+                'Current Rate': stats.totalApplications > 0 ? `${stats.responseRate.toFixed(1)}%` : '--',
                 'Responses': stats.responsesReceived,
                 'Interviews': stats.interviews,
                 'Offers': stats.offers
@@ -1006,24 +993,35 @@ export default function Dashboard() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-black dark:bg-gray-800 text-white rounded-xl shadow-md transition-colors">
                     <span className="text-lg font-medium">Total Time Spent</span>
-                    <span className="text-3xl font-bold">{stats.totalTimeSpent} hours</span>
+                    <span className="text-3xl font-bold">
+                      {stats.totalTimeSpent > 0
+                        ? `${stats.totalTimeSpent} hrs`
+                        : stats.totalApplications > 0
+                          ? `~${Math.round(stats.totalApplications * 15 / 60 * 10) / 10} hrs`
+                          : '-- hrs'}
+                    </span>
                   </div>
+                  {stats.averageTimePerApp === 0 && stats.totalApplications > 0 && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg text-sm text-amber-700 dark:text-amber-300">
+                      ⏱️ Estimates shown. Enable the extension to track precise application time automatically.
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
                       <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 transition-colors">Average per App</div>
-                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.averageTimePerApp} min</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.averageTimePerApp > 0 ? `${stats.averageTimePerApp} min` : (stats.totalApplications > 0 ? '~15 min' : '--')}</div>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
                       <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 transition-colors">Median per App</div>
-                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.medianTimePerApp || 0} min</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.medianTimePerApp > 0 ? `${stats.medianTimePerApp} min` : (stats.totalApplications > 0 ? '~12 min' : '--')}</div>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
                       <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 transition-colors">P90 per App</div>
-                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.p90TimePerApp || 0} min</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.p90TimePerApp > 0 ? `${stats.p90TimePerApp} min` : (stats.totalApplications > 0 ? '~28 min' : '--')}</div>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
                       <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 transition-colors">Trimmed Mean</div>
-                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.trimmedAverageTimePerApp || 0} min</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white transition-colors">{stats.trimmedAverageTimePerApp > 0 ? `${stats.trimmedAverageTimePerApp} min` : (stats.totalApplications > 0 ? '~14 min' : '--')}</div>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
                       <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 transition-colors">Data Quality (Auto High)</div>

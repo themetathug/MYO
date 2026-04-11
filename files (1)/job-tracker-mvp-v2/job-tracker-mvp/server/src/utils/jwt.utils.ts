@@ -9,7 +9,7 @@ if (process.env.NODE_ENV === 'production' && JWT_SECRET === FALLBACK_SECRET) {
   logger.error('❌ FATAL: JWT_SECRET is not set or uses the development default in production. Aborting.');
   process.exit(1);
 }
-const ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
+const ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 const JWT_ISSUER = process.env.JWT_ISSUER || 'uk-jobs-insider';
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'job-tracker';
 const ACCESS_TOKEN_TTL = ACCESS_TOKEN_EXPIRES_IN as jwt.SignOptions['expiresIn'];

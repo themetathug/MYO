@@ -4,15 +4,36 @@
 chrome.runtime.onInstalled.addListener(() => {
   console.log('UK Jobs Insider Job Tracker installed');
   
-  // Set default settings
   chrome.storage.local.set({
     enabled: true,
     autoCapture: true,
     syncEnabled: false,
   });
   
+  injectTimerOnAllTabs();
   console.log('Extension installed successfully');
 });
+
+// Re-inject when service worker starts
+injectTimerOnAllTabs();
+
+async function injectTimerOnAllTabs() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) continue;
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
+          tab.url.startsWith('about:') || tab.url.startsWith('edge://') ||
+          tab.url.startsWith('https://chrome.google.com')) continue;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['timer.js'],
+        });
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
 
 // Listen for messages from content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

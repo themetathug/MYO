@@ -1274,10 +1274,19 @@ class JobCapture {
   detectJobPage() {
     const url = window.location.href;
     
-    // Check for LinkedIn My Jobs page
+    // Check for LinkedIn My Jobs page — auto-import applied jobs
     if (url.includes('linkedin.com/my-items/saved-jobs') && url.includes('cardType=APPLIED')) {
-      console.log('🎯 LinkedIn Applied Jobs page detected!');
-      this.showNotification('📋 Click extension icon to import all your applied jobs!', 'info');
+      console.log('🎯 LinkedIn Applied Jobs page detected — auto-importing!');
+      this.showNotification('📋 Auto-importing your applied jobs...', 'info');
+      setTimeout(() => {
+        this.captureLinkedInMyJobs().then(result => {
+          if (result && result.success) {
+            this.showNotification('✅ Imported ' + (result.count || 0) + ' applied jobs!', 'success');
+          }
+        }).catch(err => {
+          console.error('Auto-import error:', err);
+        });
+      }, 3000);
       return;
     }
     

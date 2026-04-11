@@ -1,13 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { pool } from '../database/client';
 import { logger } from '../utils/logger';
-
-interface JwtPayload {
-  userId: string;
-  iat: number;
-  exp: number;
-}
+import { verifyToken } from '../utils/jwt.utils';
 
 declare global {
   namespace Express {
@@ -76,17 +70,16 @@ export async function authMiddleware(
       return next();
     }
 
-    // Verify JWT token with strict issuer/audience validation.
-    const decoded = jwt.verify(
-      rawToken,
-      process.env.JWT_SECRET || 'development-secret-key',
-      {
-        issuer: process.env.JWT_ISSUER || 'uk-jobs-insider',
-        audience: process.env.JWT_AUDIENCE || 'job-tracker',
-      }
-    ) as JwtPayload;
+    const decoded = verifyToken(rawToken);
 
-    // Verify user exists in database
+    if (!decoded) {
+      return res.status(401).json({
+        error: 'Invalid token',
+        message: 'Your session has expired or the token is invalid. Please login again.',
+        code: 'INVALID_TOKEN',
+      });
+    }
+
     const result = await pool.query(
       'SELECT id, email, subscription FROM users WHERE id = $1',
       [decoded.userId]
@@ -101,7 +94,6 @@ export async function authMiddleware(
 
     const user = result.rows[0];
 
-    // Attach user to request
     req.user = {
       id: user.id,
       email: user.email,
@@ -111,30 +103,6 @@ export async function authMiddleware(
     next();
   } catch (error) {
     logger.error('Authentication error:', error);
-    
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({
-        error: 'Token expired',
-        message: 'Your session has expired. Please login again.',
-        code: 'TOKEN_EXPIRED',
-      });
-    }
-    
-    if (error instanceof jwt.JsonWebTokenError) {
-      // Log more details for debugging
-      logger.debug('JWT Error details:', {
-        name: error.name,
-        message: error.message,
-        hasJWT_SECRET: !!process.env.JWT_SECRET,
-      });
-      
-      return res.status(401).json({
-        error: 'Invalid token',
-        message: 'The provided token is invalid. Please login again.',
-        code: 'INVALID_TOKEN',
-      });
-    }
-
     return res.status(500).json({
       error: 'Authentication failed',
       message: 'An error occurred during authentication.',
@@ -167,30 +135,24 @@ export async function optionalAuthMiddleware(
   }
 
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || 'development-secret-key',
-      {
-        issuer: process.env.JWT_ISSUER || 'uk-jobs-insider',
-        audience: process.env.JWT_AUDIENCE || 'job-tracker',
+    const decoded = verifyToken(token);
+
+    if (decoded) {
+      const result = await pool.query(
+        'SELECT id, email, subscription FROM users WHERE id = $1',
+        [decoded.userId]
+      );
+
+      if (result.rows.length > 0) {
+        const user = result.rows[0];
+        req.user = {
+          id: user.id,
+          email: user.email,
+          subscription: user.subscription,
+        };
       }
-    ) as JwtPayload;
-
-    const result = await pool.query(
-      'SELECT id, email, subscription FROM users WHERE id = $1',
-      [decoded.userId]
-    );
-
-    if (result.rows.length > 0) {
-      const user = result.rows[0];
-      req.user = {
-        id: user.id,
-        email: user.email,
-        subscription: user.subscription,
-      };
     }
   } catch (error) {
-    // Silently ignore invalid tokens for optional auth
     logger.debug('Optional auth token invalid:', error);
   }
 

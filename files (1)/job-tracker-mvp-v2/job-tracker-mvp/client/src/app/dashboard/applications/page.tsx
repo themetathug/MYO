@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { applicationsAPI, analyticsAPI, usersAPI } from '../../../lib/api';
@@ -11,6 +12,7 @@ import { StatusHistoryModal } from '../../../components/StatusHistoryModal';
 import { GhostingSettings } from '../../../components/GhostingSettings';
 
 export default function ApplicationsPage() {
+  const router = useRouter();
   const [applications, setApplications] = useState<any[]>([]);
   const [filteredApplications, setFilteredApplications] = useState<any[]>([]);
   const [reviewQueue, setReviewQueue] = useState<any[]>([]);
@@ -85,12 +87,17 @@ export default function ApplicationsPage() {
     hydrateRecommendedCv();
   }, []);
 
-  // Keep applications page up-to-date with extension tracked entries
+  // Keep applications page up-to-date with extension tracked entries (silent background refresh)
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchApplications();
-      fetchReviewQueue();
-    }, 5000);
+    const silentRefresh = async () => {
+      try {
+        const data = await applicationsAPI.getAll({ limit: 100 });
+        setApplications(data.applications || []);
+      } catch {
+        // Silently ignore background refresh errors
+      }
+    };
+    const interval = setInterval(silentRefresh, 30000); // every 30s, no loading spinner
     return () => clearInterval(interval);
   }, []);
 
@@ -146,16 +153,16 @@ export default function ApplicationsPage() {
     setFilteredApplications(filtered);
   }, [applications, searchQuery, statusFilter, sourceFilter, sortBy, sortOrder]);
 
-  const fetchApplications = async () => {
+  const fetchApplications = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await applicationsAPI.getAll({ limit: 100 });
       setApplications(data.applications || []);
     } catch (error: any) {
-      toast.error('Failed to load applications');
+      if (!silent) toast.error('Failed to load applications');
       console.error(error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -344,13 +351,13 @@ export default function ApplicationsPage() {
               
               <div className="flex space-x-6">
                 <button 
-                  onClick={() => window.location.href = '/dashboard'}
+                  onClick={() => router.push('/dashboard')}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white font-medium transition"
                 >
                   Dashboard
                 </button>
                 <button
-                  onClick={() => window.location.href = '/dashboard/cv-insights'}
+                  onClick={() => router.push('/dashboard/cv-insights')}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white font-medium transition"
                 >
                   CV Insights
