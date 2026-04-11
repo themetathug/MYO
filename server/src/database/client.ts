@@ -1,16 +1,38 @@
 import { Pool } from 'pg';
 import { logger } from '../utils/logger';
 
-const pool = new Pool({
-  host: process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost', // Use 'localhost' for local, 'postgres' for Docker
-  port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432'),
-  database: process.env.DB_NAME || process.env.POSTGRES_DB || 'jobtracker',
-  user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
-  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'postgres', // Default password for local setup
-  connectionTimeoutMillis: 10000,
-  idleTimeoutMillis: 30000,
-  ssl: false
-});
+function buildPoolConfig(): ConstructorParameters<typeof Pool>[0] {
+  const databaseUrl = process.env.DATABASE_URL;
+  const base = {
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+  };
+
+  if (databaseUrl) {
+    const requireSsl =
+      process.env.DATABASE_SSL !== 'false' &&
+      (databaseUrl.includes('sslmode=require') ||
+        databaseUrl.includes('render.com') ||
+        process.env.NODE_ENV === 'production');
+    return {
+      ...base,
+      connectionString: databaseUrl,
+      ssl: requireSsl ? { rejectUnauthorized: false } : false,
+    };
+  }
+
+  return {
+    ...base,
+    host: process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432', 10),
+    database: process.env.DB_NAME || process.env.POSTGRES_DB || 'jobtracker',
+    user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
+    password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'postgres',
+    ssl: false,
+  };
+}
+
+const pool = new Pool(buildPoolConfig());
 
 // Initialize database connection
 export async function initializeDatabase() {

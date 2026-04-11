@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cross-env DB_HOST=localhost DB_PORT=5432 DB_NAME=jobtracker DB_USER=postgres DB_PASSWORD=postgres PORT=3001 NODE_ENV=development JWT_SECRET=uk-job-tracker-secret-key-2025-production-safe ALLOWED_ORIGINS=http://localhost:3000 tsx watch src/index.ts",
     "build": "tsc",
-    "start": "cross-env DB_HOST=localhost DB_PORT=5432 DB_NAME=jobtracker DB_USER=postgres DB_PASSWORD=postgres PORT=3001 node dist/index.js",
+    "start": "node dist/index.js",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx src/database/seed.ts",
