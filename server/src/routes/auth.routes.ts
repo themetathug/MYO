@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { pool } from '../database/client';
+import { findUserByEmailForAuth, insertUserForAuth } from '../database/auth-queries';
 import { logger } from '../utils/logger';
 import { validateRequest } from '../middleware/validation.middleware';
 import { generateToken, verifyToken } from '../utils/jwt.utils';
@@ -28,17 +28,8 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
   try {
     const { email, password, firstName, lastName } = req.body;
 
-    // Check if user exists
-    const existingUserResult = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
-
-    if (!existingUserResult || !existingUserResult.rows) {
-      throw new Error('Database query failed - invalid result structure');
-    }
-
-    if (existingUserResult.rows.length > 0) {
+    const existing = await findUserByEmailForAuth(email.toLowerCase());
+    if (existing) {
       return res.status(400).json({
         error: 'User already exists',
         message: 'An account with this email already exists',
@@ -49,27 +40,15 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Create user
-    const result = await pool.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, NOW(), NOW())
-       RETURNING id, email, first_name, last_name, subscription, created_at`,
-      [
-        email.toLowerCase(),
-        passwordHash,
-        firstName || null,
-        lastName || null,
-      ]
-    );
+    const user = await insertUserForAuth({
+      email: email.toLowerCase(),
+      passwordHash,
+      firstName: firstName || null,
+      lastName: lastName || null,
+    });
 
-    if (!result || !result.rows || result.rows.length === 0) {
+    if (!user?.id) {
       throw new Error('Failed to create user - no data returned from database');
-    }
-
-    const user = result.rows[0];
-
-    if (!user || !user.id) {
-      throw new Error('Invalid user data returned from database');
     }
 
     // Generate token with email
@@ -85,7 +64,7 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
         firstName: user.first_name,
         lastName: user.last_name,
         subscription: user.subscription,
-        createdAt: user.created_at,
+        createdAt: user.created_at?.toISOString?.() ?? new Date().toISOString(),
       },
       token,
     });
@@ -105,24 +84,16 @@ router.post('/login', validateRequest(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
-    const result = await pool.query(
-      `SELECT id, email, password_hash, first_name, last_name, subscription, weekly_target, monthly_target
-       FROM users
-       WHERE email = $1`,
-      [email.toLowerCase()]
-    );
+    const user = await findUserByEmailForAuth(email.toLowerCase());
 
-    if (!result || !result.rows || result.rows.length === 0) {
+    if (!user) {
       return res.status(401).json({
         error: 'Invalid credentials',
         message: 'Email or password is incorrect',
       });
     }
 
-    const user = result.rows[0];
-
-    if (!user || !user.id || !user.password_hash) {
+    if (!user.id || !user.password_hash) {
       throw new Error('Invalid user data returned from database');
     }
 

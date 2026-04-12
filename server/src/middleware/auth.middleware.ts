@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { pool } from '../database/client';
+import { findUserByIdForAuth } from '../database/auth-queries';
 import { logger } from '../utils/logger';
 
 interface JwtPayload {
@@ -51,26 +51,19 @@ export async function authMiddleware(
       }
     ) as JwtPayload;
 
-    // Verify user exists in database
-    const result = await pool.query(
-      'SELECT id, email, subscription FROM users WHERE id = $1',
-      [decoded.userId]
-    );
+    const userRow = await findUserByIdForAuth(decoded.userId);
 
-    if (result.rows.length === 0) {
+    if (!userRow) {
       return res.status(401).json({
         error: 'Invalid token',
         message: 'User not found.',
       });
     }
 
-    const user = result.rows[0];
-
-    // Attach user to request
     req.user = {
-      id: user.id,
-      email: user.email,
-      subscription: user.subscription,
+      id: userRow.id,
+      email: userRow.email,
+      subscription: userRow.subscription,
     };
 
     next();
@@ -120,17 +113,13 @@ export async function optionalAuthMiddleware(
       }
     ) as JwtPayload;
 
-    const result = await pool.query(
-      'SELECT id, email, subscription FROM users WHERE id = $1',
-      [decoded.userId]
-    );
+    const userRow = await findUserByIdForAuth(decoded.userId);
 
-    if (result.rows.length > 0) {
-      const user = result.rows[0];
+    if (userRow) {
       req.user = {
-        id: user.id,
-        email: user.email,
-        subscription: user.subscription,
+        id: userRow.id,
+        email: userRow.email,
+        subscription: userRow.subscription,
       };
     }
   } catch (error) {
