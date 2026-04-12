@@ -101,6 +101,16 @@ app.use(cors({
     if (origin.includes('linkedin.com')) {
       return callback(null, true);
     }
+
+    // Vercel deployments (*.vercel.app) — avoids CORS misconfig when env is wrong
+    try {
+      const { hostname } = new URL(origin);
+      if (hostname.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+    } catch {
+      /* ignore malformed origin */
+    }
     
     // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {

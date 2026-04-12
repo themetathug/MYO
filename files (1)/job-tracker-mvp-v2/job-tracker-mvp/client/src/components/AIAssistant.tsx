@@ -3,8 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from '../lib/getApiBaseUrl';
 
 interface Message {
   id: string;
@@ -19,13 +18,16 @@ interface AIAssistantProps {
 }
 
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${getApiBaseUrl()}${endpoint}`, {
     ...options,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
   return res.json();
 }

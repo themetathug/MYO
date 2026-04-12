@@ -1,6 +1,13 @@
+import { getApiBaseUrl } from './getApiBaseUrl';
+
 // API service for backend communication
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+function apiDisplayBase(): string {
+  const b = getApiBaseUrl();
+  if (b) return b;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+}
 let refreshInFlight: Promise<unknown> | null = null;
 
 function getAuthToken(): string | null {
@@ -19,14 +26,16 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}, allowR
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
   let response: Response;
   try {
     response = await fetch(url, { ...options, headers, credentials: 'include' });
   } catch (err: any) {
     const msg = err?.message || String(err);
     if (msg === 'Failed to fetch' || msg.includes('NetworkError') || err?.name === 'TypeError') {
-      throw new Error(`Cannot reach the server at ${API_BASE_URL}. Make sure the backend is running.`);
+      throw new Error(
+        `Cannot reach the API (tried ${apiDisplayBase()}). On Vercel, set NEXT_PUBLIC_API_URL to your Render URL at build time and redeploy.`
+      );
     }
     throw err;
   }
@@ -100,14 +109,16 @@ async function fetchPublic(endpoint: string, options: RequestInit = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
   let response: Response;
   try {
     response = await fetch(url, { ...options, headers, credentials: 'include' });
   } catch (err: any) {
     const msg = err?.message || String(err);
     if (msg === 'Failed to fetch' || msg.includes('NetworkError') || err?.name === 'TypeError') {
-      throw new Error(`Cannot reach the server at ${API_BASE_URL}. Make sure the backend is running.`);
+      throw new Error(
+        `Cannot reach the API (tried ${apiDisplayBase()}). On Vercel, set NEXT_PUBLIC_API_URL to your Render URL at build time and redeploy.`
+      );
     }
     throw err;
   }

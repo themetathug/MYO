@@ -24,6 +24,7 @@ import { NotificationBell } from '../../components/NotificationBell';
 import { JobScrapingModal } from '../../components/JobScrapingModal';
 import { AIAssistant } from '../../components/AIAssistant';
 import { applicationsAPI, analyticsAPI, authAPI } from '../../lib/api';
+import { getApiBaseUrl } from '../../lib/getApiBaseUrl';
 
 ChartJS.register(
   CategoryScale,
@@ -306,16 +307,21 @@ export default function Dashboard() {
     // Uses a one-time server-issued token so EventSource works cross-origin
     // (browser EventSource cannot send Authorization headers).
     // Falls back to 30 s polling if SSE or token fetch fails.
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const API_BASE = getApiBaseUrl();
     let es: EventSource | null = null;
     let fallbackInterval: ReturnType<typeof setInterval> | null = null;
     let cancelled = false;
 
     const startSSE = async () => {
       try {
+        const jwt = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
         const tokenRes = await fetch(`${API_BASE}/api/auth/sse-token`, {
           method: 'POST',
           credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+          },
         });
         if (!tokenRes.ok) throw new Error('token fetch failed');
         const { token } = await tokenRes.json();
