@@ -21,30 +21,43 @@ export type AuthUserRow = {
   created_at?: Date;
 };
 
+function mapPrismaUserToRow(user: {
+  id: string;
+  email: string;
+  passwordHash: string;
+  firstName: string | null;
+  lastName: string | null;
+  subscription: string;
+  weeklyTarget: number;
+  monthlyTarget: number;
+}): AuthUserRow {
+  return {
+    id: user.id,
+    email: user.email,
+    password_hash: user.passwordHash,
+    first_name: user.firstName,
+    last_name: user.lastName,
+    subscription: String(user.subscription),
+    weekly_target: user.weeklyTarget,
+    monthly_target: user.monthlyTarget,
+  };
+}
+
 /**
- * Find user for login. Supports both:
- * - init.sql style: table `users`, columns `password_hash`, etc.
- * - Prisma default: table "User", columns "passwordHash", etc.
+ * Find user for login / duplicate check.
+ * 1) Prisma Client first (case-insensitive) — never shadowed by a stale legacy `users` row.
+ * 2) SQL `"User"` then 3) SQL `users` for installs that rely on raw SQL only.
  */
 export async function findUserByEmailForAuth(email: string): Promise<AuthUserRow | null> {
-  const e = email.toLowerCase();
+  const e = normalizeAuthEmail(email);
 
   try {
-    const r = await pool.query<AuthUserRow>(
-      `SELECT id::text AS id, email, password_hash,
-              first_name, last_name,
-              subscription::text AS subscription,
-              weekly_target, monthly_target
-       FROM users
-       WHERE email = $1`,
-      [e]
-    );
-    if (r.rows?.length) return r.rows[0];
+    const u = await prisma.user.findFirst({
+      where: { email: { equals: e, mode: 'insensitive' } },
+    });
+    if (u) return mapPrismaUserToRow(u);
   } catch (err: unknown) {
-    const code = (err as { code?: string })?.code;
-    if (code !== '42P01' && code !== '42703') {
-      logger.warn('[auth] users table query:', err);
-    }
+    logger.warn('[auth] prisma.user findFirst:', err);
   }
 
   try {
@@ -57,7 +70,7 @@ export async function findUserByEmailForAuth(email: string): Promise<AuthUserRow
               "weeklyTarget" AS weekly_target,
               "monthlyTarget" AS monthly_target
        FROM "User"
-       WHERE email = $1`,
+       WHERE LOWER(TRIM(email)) = $1`,
       [e]
     );
     if (r.rows?.length) return r.rows[0];
@@ -65,6 +78,24 @@ export async function findUserByEmailForAuth(email: string): Promise<AuthUserRow
     const code = (err as { code?: string })?.code;
     if (code !== '42P01' && code !== '42703') {
       logger.warn('[auth] User table query:', err);
+    }
+  }
+
+  try {
+    const r = await pool.query<AuthUserRow>(
+      `SELECT id::text AS id, email, password_hash,
+              first_name, last_name,
+              subscription::text AS subscription,
+              weekly_target, monthly_target
+       FROM users
+       WHERE LOWER(TRIM(email)) = $1`,
+      [e]
+    );
+    if (r.rows?.length) return r.rows[0];
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code !== '42P01' && code !== '42703') {
+      logger.warn('[auth] users table query:', err);
     }
   }
 
@@ -79,9 +110,22 @@ export type AuthUserJwtRow = {
 };
 
 /**
- * Load user by id for auth middleware. Supports `users` and Prisma `"User"`.
+ * Load user by id for auth middleware. Prisma first, then SQL `"User"`, then `users`.
  */
 export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRow | null> {
+  try {
+    const u = await prisma.user.findUnique({ where: { id: userId } });
+    if (u) {
+      return {
+        id: u.id,
+        email: u.email,
+        subscription: String(u.subscription),
+      };
+    }
+  } catch (err: unknown) {
+    logger.warn('[auth] prisma.user findUnique by id:', err);
+  }
+
   try {
     const r = await pool.query<AuthUserJwtRow>(
       `SELECT id::text AS id, email, "subscription"::text AS subscription
@@ -113,28 +157,6 @@ export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRo
   }
 
   return null;
-}
-
-function mapPrismaUserToRow(user: {
-  id: string;
-  email: string;
-  passwordHash: string;
-  firstName: string | null;
-  lastName: string | null;
-  subscription: string;
-  weeklyTarget: number;
-  monthlyTarget: number;
-}): AuthUserRow {
-  return {
-    id: user.id,
-    email: user.email,
-    password_hash: user.passwordHash,
-    first_name: user.firstName,
-    last_name: user.lastName,
-    subscription: String(user.subscription),
-    weekly_target: user.weeklyTarget,
-    monthly_target: user.monthlyTarget,
-  };
 }
 
 /**

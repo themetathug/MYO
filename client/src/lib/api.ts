@@ -1,6 +1,16 @@
 // API service for backend communication
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+/**
+ * In the browser, when `NEXT_PUBLIC_API_URL` is unset, use same-origin `/api` so Next.js
+ * rewrites proxy to the real API (avoids broken `undefined/api/...` URLs on Vercel).
+ */
+export function getApiBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    return fromEnv || '';
+  }
+  return fromEnv || 'http://localhost:3001';
+}
 
 // Helper to get auth token
 const getAuthToken = (): string | null => {
@@ -21,7 +31,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
     ...options,
     headers,
   });
@@ -50,7 +60,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
 /** Login/register must not send a stored token (avoids odd 401 handling and stale Bearer headers). */
 async function fetchPublicJson(endpoint: string, options: RequestInit = {}) {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import { CustomCursor } from '../../components/CustomCursor';
 import { ParticleBackground } from '../../components/ParticleBackground';
+import { authAPI } from '../../lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,37 +30,15 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      const data = await authAPI.login({
+        email: formData.email.trim(),
+        password: formData.password,
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        toast.success('Login successful!');
-        router.push('/dashboard');
-      } else {
-        // For demo, allow mock login
-        if (formData.email === 'demo@ukjobsinsider.com' && formData.password === 'Demo123!') {
-          localStorage.setItem('token', 'mock-token');
-          localStorage.setItem('user', JSON.stringify({ 
-            id: 'demo-user',
-            email: formData.email,
-            firstName: 'Demo',
-            lastName: 'User'
-          }));
-          toast.success('Login successful! (Demo Mode)');
-          router.push('/dashboard');
-        } else {
-          toast.error(data.message || 'Login failed');
-        }
-      }
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      toast.success('Login successful!');
+      router.push('/dashboard');
     } catch (error) {
       // Allow demo login even if API is down
       if (formData.email === 'demo@ukjobsinsider.com' && formData.password === 'Demo123!') {
