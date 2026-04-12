@@ -1,6 +1,12 @@
+import { Prisma } from '@prisma/client';
 import { pool } from './client';
 import { prisma } from './client';
 import { logger } from '../utils/logger';
+
+/** Match login/register input to stored emails regardless of case or accidental spaces. */
+export function normalizeAuthEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
 
 /** Row shape used by auth routes (normalized to snake_case keys). */
 export type AuthUserRow = {
@@ -78,21 +84,6 @@ export type AuthUserJwtRow = {
 export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRow | null> {
   try {
     const r = await pool.query<AuthUserJwtRow>(
-      `SELECT id::text AS id, email, subscription::text AS subscription
-       FROM users
-       WHERE id = $1`,
-      [userId]
-    );
-    if (r.rows?.length) return r.rows[0];
-  } catch (err: unknown) {
-    const code = (err as { code?: string })?.code;
-    if (code !== '42P01' && code !== '42703') {
-      logger.warn('[auth] users id lookup:', err);
-    }
-  }
-
-  try {
-    const r = await pool.query<AuthUserJwtRow>(
       `SELECT id::text AS id, email, "subscription"::text AS subscription
        FROM "User"
        WHERE id = $1`,
@@ -103,6 +94,21 @@ export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRo
     const code = (err as { code?: string })?.code;
     if (code !== '42P01' && code !== '42703') {
       logger.warn('[auth] User id lookup:', err);
+    }
+  }
+
+  try {
+    const r = await pool.query<AuthUserJwtRow>(
+      `SELECT id::text AS id, email, subscription::text AS subscription
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+    if (r.rows?.length) return r.rows[0];
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code !== '42P01' && code !== '42703') {
+      logger.warn('[auth] users id lookup:', err);
     }
   }
 
@@ -132,7 +138,8 @@ function mapPrismaUserToRow(user: {
 }
 
 /**
- * Insert user on register — init.sql `users` first; if missing, Prisma `User`.
+ * Insert user on register — Prisma `"User"` first (canonical for this codebase);
+ * if that table is missing (legacy DB), fall back to init.sql `users`.
  */
 export async function insertUserForAuth(params: {
   email: string;
@@ -141,6 +148,31 @@ export async function insertUserForAuth(params: {
   lastName: string | null;
 }): Promise<AuthUserRow> {
   const { email, passwordHash, firstName, lastName } = params;
+
+  try {
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        firstName: firstName ?? undefined,
+        lastName: lastName ?? undefined,
+      },
+    });
+    const row = mapPrismaUserToRow(user);
+    row.created_at = user.createdAt;
+    return row;
+  } catch (err: unknown) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw err;
+    }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
+      logger.info('[auth] Prisma User table missing, using legacy users insert');
+    } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      throw err;
+    } else {
+      throw err;
+    }
+  }
 
   try {
     const r = await pool.query<AuthUserRow & { created_at?: Date }>(
@@ -158,15 +190,5 @@ export async function insertUserForAuth(params: {
     }
   }
 
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      firstName: firstName ?? undefined,
-      lastName: lastName ?? undefined,
-    },
-  });
-  const row = mapPrismaUserToRow(user);
-  row.created_at = user.createdAt;
-  return row;
+  throw new Error('Failed to create user: neither Prisma User nor legacy users table accepted the row');
 }

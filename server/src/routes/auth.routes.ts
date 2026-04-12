@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { findUserByEmailForAuth, insertUserForAuth } from '../database/auth-queries';
+import { Prisma } from '@prisma/client';
+import { findUserByEmailForAuth, insertUserForAuth, normalizeAuthEmail } from '../database/auth-queries';
 import { logger } from '../utils/logger';
 import { validateRequest } from '../middleware/validation.middleware';
 import { generateToken, verifyToken } from '../utils/jwt.utils';
@@ -10,7 +11,7 @@ const router = Router();
 
 // Validation schemas
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform((s) => s.trim().toLowerCase()),
   password: z.string().min(8).max(100),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
@@ -19,7 +20,7 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform((s) => s.trim().toLowerCase()),
   password: z.string(),
 });
 
@@ -28,7 +29,7 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
   try {
     const { email, password, firstName, lastName } = req.body;
 
-    const existing = await findUserByEmailForAuth(email.toLowerCase());
+    const existing = await findUserByEmailForAuth(email);
     if (existing) {
       return res.status(400).json({
         error: 'User already exists',
@@ -41,7 +42,7 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     const user = await insertUserForAuth({
-      email: email.toLowerCase(),
+      email: normalizeAuthEmail(email),
       passwordHash,
       firstName: firstName || null,
       lastName: lastName || null,
@@ -69,6 +70,12 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
       token,
     });
   } catch (error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(400).json({
+        error: 'User already exists',
+        message: 'An account with this email already exists',
+      });
+    }
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.error('Registration error:', error);
     res.status(500).json({
@@ -84,7 +91,7 @@ router.post('/login', validateRequest(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await findUserByEmailForAuth(email.toLowerCase());
+    const user = await findUserByEmailForAuth(email);
 
     if (!user) {
       return res.status(401).json({

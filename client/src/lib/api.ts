@@ -48,17 +48,35 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   return response.json();
 }
 
+/** Login/register must not send a stored token (avoids odd 401 handling and stale Bearer headers). */
+async function fetchPublicJson(endpoint: string, options: RequestInit = {}) {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+    throw new Error(errorData.message || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
 // Auth APIs
 export const authAPI = {
   register: async (data: { email: string; password: string; firstName?: string; lastName?: string }) => {
-    return fetchWithAuth('/api/auth/register', {
+    return fetchPublicJson('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
   login: async (data: { email: string; password: string }) => {
-    return fetchWithAuth('/api/auth/login', {
+    return fetchPublicJson('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     });
