@@ -101,7 +101,7 @@ function isLikelyJwt(token) {
   return (
     typeof token === 'string' &&
     token !== 'mock-token' &&
-    token.length > 30 &&
+    token.length >= 20 &&
     token.split('.').length === 3
   );
 }
@@ -142,6 +142,18 @@ async function getJobTrackerAuthToken() {
       /* ignore */
     }
   }
+
+  // LinkedIn tab: ask background to pull JWT from any open localhost dashboard tab
+  try {
+    const res = await chrome.runtime.sendMessage({ action: 'syncTokenFromDashboard' });
+    if (res?.token && isLikelyJwt(res.token)) {
+      await chrome.storage.local.set({ token: res.token });
+      return res.token;
+    }
+  } catch (e) {
+    console.warn('[UK Job Tracker] Auto token sync from dashboard:', e?.message || e);
+  }
+
   return null;
 }
 

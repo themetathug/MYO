@@ -1,10 +1,47 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { pool } from '../database/client';
+import { pool, prisma } from '../database/client';
 import { logger } from '../utils/logger';
 import { validateRequest } from '../middleware/validation.middleware';
 
 const router = Router();
+
+/** Cold email counts: legacy `cold_emails` first, else Prisma `ColdEmail`. */
+async function getColdEmailAggregates(
+  userId: string,
+  periodStart: Date
+): Promise<{ allTimeSent: number; allTimeResponses: number; inPeriod: number }> {
+  try {
+    const inPeriodR = await pool.query<{ c: number }>(
+      `SELECT COUNT(*)::int AS c FROM cold_emails WHERE user_id = $1 AND sent_at >= $2`,
+      [userId, periodStart]
+    );
+    const allR = await pool.query<{ total: number; responses: number }>(
+      `SELECT COUNT(*)::int AS total,
+              COALESCE(SUM(CASE WHEN responded = true THEN 1 ELSE 0 END), 0)::int AS responses
+       FROM cold_emails WHERE user_id = $1`,
+      [userId]
+    );
+    return {
+      inPeriod: inPeriodR.rows[0]?.c ?? 0,
+      allTimeSent: allR.rows[0]?.total ?? 0,
+      allTimeResponses: allR.rows[0]?.responses ?? 0,
+    };
+  } catch {
+    try {
+      const inPeriod = await prisma.coldEmail.count({
+        where: { userId, sentAt: { gte: periodStart } },
+      });
+      const allTimeSent = await prisma.coldEmail.count({ where: { userId } });
+      const allTimeResponses = await prisma.coldEmail.count({
+        where: { userId, responseReceived: true },
+      });
+      return { allTimeSent, allTimeResponses, inPeriod };
+    } catch {
+      return { allTimeSent: 0, allTimeResponses: 0, inPeriod: 0 };
+    }
+  }
+}
 
 // Validation schemas
 const createApplicationSchema = z.object({
@@ -616,24 +653,25 @@ router.get('/stats/summary', async (req, res) => {
       ? Math.round((weeklyApplications / weeklyGoal) * 100 * 100) / 100 
       : 0;
 
-    // Get cold email stats - get ALL cold emails (not period-filtered)
-    const coldEmailResult = await pool.query(
-      `SELECT COUNT(*) as total, 
-       SUM(CASE WHEN responded = true THEN 1 ELSE 0 END) as responses
-       FROM cold_emails WHERE user_id = $1`,
-      [userId]
-    );
-    const coldEmailsSent = parseInt(coldEmailResult.rows[0]?.total || '0');
-    const coldEmailResponses = parseInt(coldEmailResult.rows[0]?.responses || '0');
+    const cold = await getColdEmailAggregates(userId, startDate);
+    const coldEmailsSent = cold.allTimeSent;
+    const coldEmailResponses = cold.allTimeResponses;
+    const coldEmailsInPeriod = cold.inPeriod;
     const coldEmailConversionRate = coldEmailsSent > 0
       ? Math.round((coldEmailResponses / coldEmailsSent) * 100 * 100) / 100
       : 0;
-    
-    logger.info(`Cold emails stats for user ${userId}: sent=${coldEmailsSent}, responses=${coldEmailResponses}, rate=${coldEmailConversionRate}%`);
+
+    const totalWithColdOutreach = total + coldEmailsInPeriod;
+
+    logger.info(
+      `Cold emails stats for user ${userId}: sent=${coldEmailsSent}, responses=${coldEmailResponses}, inPeriod=${coldEmailsInPeriod}, rate=${coldEmailConversionRate}%`
+    );
 
     return res.json({
       period: days,
       total,
+      totalWithColdOutreach,
+      coldEmailsInPeriod,
       weeklyApplications,
       lastWeekApplications,
       monthlyApplications,

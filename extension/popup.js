@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return (
       typeof token === 'string' &&
       token !== 'mock-token' &&
-      token.length > 30 &&
+      token.length >= 20 &&
       token.split('.').length === 3
     );
   }

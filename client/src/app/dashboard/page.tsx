@@ -148,7 +148,9 @@ export default function Dashboard() {
         });
 
         setStats({
-          totalApplications: statsData.total || 0,
+          totalApplications:
+            statsData.totalWithColdOutreach ??
+            (statsData.total || 0) + (statsData.coldEmailsInPeriod || 0),
           weeklyApplications: statsData.weeklyApplications || 0,
           lastWeekApplications: statsData.lastWeekApplications || 0,
           monthlyApplications: statsData.monthlyApplications || 0,

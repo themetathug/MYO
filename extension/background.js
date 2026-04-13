@@ -1,6 +1,50 @@
 // Background Service Worker for UK Jobs Insider Job Tracker Extension
 // Handles extension lifecycle and cross-tab communication
 
+function isLikelyJwt(token) {
+  return (
+    typeof token === 'string' &&
+    token !== 'mock-token' &&
+    token.length >= 20 &&
+    token.split('.').length === 3
+  );
+}
+
+/** Copy JWT from an open Job Tracker tab (localhost) into extension storage — works from LinkedIn. */
+async function pullTokenFromOpenDashboardTabs() {
+  const tabs = await chrome.tabs.query({});
+  const candidates = tabs.filter(
+    (t) =>
+      t.id &&
+      t.url &&
+      (/\/\/localhost:(3000|3001|3002|3003)\b/.test(t.url) ||
+        /\/\/127\.0\.0\.1:(3000|3001|3002|3003)\b/.test(t.url))
+  );
+
+  for (const tab of candidates) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          try {
+            return localStorage.getItem('token');
+          } catch {
+            return null;
+          }
+        },
+      });
+      const token = results?.[0]?.result;
+      if (isLikelyJwt(token)) {
+        await chrome.storage.local.set({ token, apiUrl: 'http://localhost:3001' });
+        return token;
+      }
+    } catch {
+      /* tab may forbid injection */
+    }
+  }
+  return null;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log('UK Jobs Insider Job Tracker installed');
   
@@ -37,6 +81,13 @@ async function injectTimerOnAllTabs() {
 
 // Listen for messages from content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'syncTokenFromDashboard') {
+    pullTokenFromOpenDashboardTabs()
+      .then((token) => sendResponse({ ok: !!token, token: token || null }))
+      .catch((err) => sendResponse({ ok: false, token: null, error: String(err?.message || err) }));
+    return true;
+  }
+
   if (request.action === 'saveApplication') {
     // Handle application save
     (async () => {
@@ -67,15 +118,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 async function saveApplication(data) {
   try {
-    // Get auth token
-    const { token } = await chrome.storage.local.get(['token']);
-    
+    let { token, apiUrl } = await chrome.storage.local.get(['token', 'apiUrl']);
+    if (!isLikelyJwt(token)) {
+      token = await pullTokenFromOpenDashboardTabs();
+    }
     if (!token) {
       throw new Error('Not authenticated');
     }
-    
-    // Send to API
-    const response = await fetch('http://localhost:3001/api/applications', {
+    const base = (apiUrl || 'http://localhost:3001').replace(/\/$/, '');
+
+    const response = await fetch(`${base}/api/applications`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
