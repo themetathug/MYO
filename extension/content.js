@@ -96,6 +96,55 @@ const SITE_SELECTORS = {
   }
 };
 
+/** Real API JWTs are three dot-separated segments; demo login uses `mock-token` which always 401s the API. */
+function isLikelyJwt(token) {
+  return (
+    typeof token === 'string' &&
+    token !== 'mock-token' &&
+    token.length > 30 &&
+    token.split('.').length === 3
+  );
+}
+
+async function getJobTrackerApiBase() {
+  const { apiUrl } = await chrome.storage.local.get(['apiUrl']);
+  return (apiUrl || 'http://localhost:3001').replace(/\/$/, '');
+}
+
+/**
+ * Token for API calls: chrome.storage only, unless we're on the dashboard tab (localhost app)
+ * where we can copy from localStorage into extension storage.
+ * Never read localStorage on linkedin.com — it is not your app's storage.
+ */
+async function getJobTrackerAuthToken() {
+  const { token: stored } = await chrome.storage.local.get(['token']);
+  if (isLikelyJwt(stored)) {
+    return stored;
+  }
+  if (stored === 'mock-token' || (stored && !isLikelyJwt(stored))) {
+    console.warn(
+      '[UK Job Tracker] Stored token is not a valid API JWT (e.g. demo mock-token). Open http://localhost:3000 → log in with your real account → extension popup → Sync Token.'
+    );
+    await chrome.storage.local.remove(['token']);
+  }
+
+  const onLocalApp =
+    window.location.hostname === 'localhost' &&
+    ['3000', '3001', '3002', '3003', ''].includes(window.location.port);
+  if (onLocalApp) {
+    try {
+      const pageToken = localStorage.getItem('token');
+      if (isLikelyJwt(pageToken)) {
+        await chrome.storage.local.set({ token: pageToken });
+        return pageToken;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
 class JobCapture {
   constructor() {
     this.startTime = Date.now();
@@ -123,8 +172,11 @@ class JobCapture {
 
         case 'getToken':
         try {
-          const token = localStorage.getItem('token');
-          sendResponse({ token: token || null });
+          const onLocalApp =
+            window.location.hostname === 'localhost' &&
+            ['3000', '3001', '3002', '3003', ''].includes(window.location.port);
+          const token = onLocalApp ? localStorage.getItem('token') : null;
+          sendResponse({ token: token && isLikelyJwt(token) ? token : null });
         } catch (e) {
           sendResponse({ token: null });
         }
@@ -823,27 +875,15 @@ class JobCapture {
   // Bulk save jobs to backend
   async bulkSaveToBackend(jobs) {
     try {
-      let token = null;
-      
-      // Get token from chrome storage
-      const storageResult = await chrome.storage.local.get(['token']);
-      token = storageResult.token;
-      
-      // If no token in storage, try page localStorage
+      const token = await getJobTrackerAuthToken();
+
       if (!token) {
-        try {
-          token = localStorage.getItem('token');
-          if (token) {
-            await chrome.storage.local.set({ token });
-          }
-        } catch (e) {
-          console.warn('Cannot access localStorage from content script');
-        }
+        throw new Error(
+          'No valid API token. Log in at http://localhost:3000 with your real account (not Demo), open the extension popup → click Sync Token, then import again.'
+        );
       }
-      
-      if (!token) {
-        throw new Error('No auth token found. Please login at http://localhost:3000 and sync token via extension popup.');
-      }
+
+      const apiBase = await getJobTrackerApiBase();
       
       console.log(`📤 Sending ${jobs.length} jobs to backend...`);
       
@@ -868,7 +908,7 @@ class JobCapture {
             });
           }
           
-          const response = await fetch('http://localhost:3001/api/applications', {
+          const response = await fetch(`${apiBase}/api/applications`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -876,7 +916,15 @@ class JobCapture {
             },
             body: JSON.stringify(job)
           });
-          
+
+          if (response.status === 401) {
+            await chrome.storage.local.remove(['token']);
+            const authErr =
+              'API rejected your token (401). Log in at http://localhost:3000 with a real account, open the extension → Sync Token, then try again.';
+            this.showNotification(authErr, 'error');
+            throw new Error(authErr);
+          }
+
           if (response.ok) {
             const result = await response.json().catch(() => ({}));
             if (result.duplicate) {
@@ -1124,31 +1172,16 @@ class JobCapture {
 
   // Send job data to backend
   async sendToBackend(jobData) {
-    let token = null;
-    
-    // Get token from chrome storage
-    const storageResult = await chrome.storage.local.get(['token']);
-    token = storageResult.token;
-    
-    // If no token in storage, try page localStorage
+    const token = await getJobTrackerAuthToken();
+
     if (!token) {
-      try {
-        token = localStorage.getItem('token');
-        if (token) {
-          await chrome.storage.local.set({ token });
-        }
-      } catch (e) {
-        console.warn('Cannot access localStorage from content script');
-      }
-    }
-    
-    if (!token) {
-      console.warn('⚠️ No auth token, storing locally');
+      console.warn('⚠️ No valid API token, storing locally');
       await this.storeJobsLocally([jobData]);
       return;
     }
-    
-    const response = await fetch('http://localhost:3001/api/applications', {
+
+    const apiBase = await getJobTrackerApiBase();
+    const response = await fetch(`${apiBase}/api/applications`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1156,11 +1189,16 @@ class JobCapture {
       },
       body: JSON.stringify(jobData)
     });
-    
+
+    if (response.status === 401) {
+      await chrome.storage.local.remove(['token']);
+      throw new Error('API rejected token (401). Log in at localhost:3000 → extension → Sync Token.');
+    }
+
     if (!response.ok) {
       throw new Error('Failed to save to backend');
     }
-    
+
     return response.json();
   }
 
@@ -1175,25 +1213,18 @@ class JobCapture {
   // Fetch applied jobs from backend
   async fetchAppliedJobs() {
     try {
-      let token = null;
-      const storageResult = await chrome.storage.local.get(['token']);
-      token = storageResult.token;
-      
-      if (!token && window.location.hostname === 'localhost' && window.location.port === '3000') {
-        try {
-          token = localStorage.getItem('token');
-          if (token) {
-            await chrome.storage.local.set({ token });
-          }
-        } catch (e) {}
-      }
-      
+      const token = await getJobTrackerAuthToken();
+
       if (!token) {
-        this.showNotification('❌ No auth token found. Please login and sync token.', 'error');
+        this.showNotification(
+          '❌ No valid API token. Log in at localhost:3000 (real account) → extension → Sync Token.',
+          'error'
+        );
         return { success: false, error: 'No auth token found' };
       }
 
-      const response = await fetch('http://localhost:3001/api/applications', {
+      const apiBase = await getJobTrackerApiBase();
+      const response = await fetch(`${apiBase}/api/applications`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

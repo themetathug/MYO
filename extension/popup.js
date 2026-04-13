@@ -26,7 +26,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   let timeSpent = 0;
   let timerInterval = null;
   let startTime = null;
-  
+
+  function isLikelyJwt(token) {
+    return (
+      typeof token === 'string' &&
+      token !== 'mock-token' &&
+      token.length > 30 &&
+      token.split('.').length === 3
+    );
+  }
+
   // Sync auth token from frontend localStorage
   async function syncAuthToken() {
     try {
@@ -57,7 +66,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           
           if (results && results[0] && results[0].result) {
             const token = results[0].result;
-            if (token && token !== 'null' && token !== 'undefined' && token.length > 10) {
+            if (token === 'mock-token') {
+              console.warn('Demo token cannot be used with the API.');
+              return false;
+            }
+            if (token && token !== 'null' && token !== 'undefined' && isLikelyJwt(token)) {
               await chrome.storage.local.set({ token });
               console.log('✅ Token synced to extension from frontend tab');
               return true;
@@ -77,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
           });
           
-          if (response && response.token && response.token !== 'null' && response.token.length > 10) {
+          if (response && response.token && response.token !== 'null' && isLikelyJwt(response.token)) {
             await chrome.storage.local.set({ token: response.token });
             console.log('✅ Token synced via message');
             return true;
@@ -99,7 +112,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tokenStatus = document.getElementById('token-status');
     const { token } = await chrome.storage.local.get(['token']);
     
-    if (token && token !== 'null' && token.length > 10) {
+    if (token && token !== 'null' && isLikelyJwt(token)) {
       tokenStatus.textContent = '✅ Authenticated - Ready to save jobs!';
       tokenStatus.className = 'status success';
       tokenStatus.classList.remove('hidden');
@@ -128,7 +141,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       successMessage.classList.remove('hidden');
       setTimeout(() => successMessage.classList.add('hidden'), 3000);
     } else {
-      tokenStatus.textContent = '❌ Failed to sync token. Make sure you are logged in at localhost:3000/3001/3002';
+      tokenStatus.textContent =
+        '❌ No valid API token found. Log in at http://localhost:3000 with a real account (not Demo), keep that tab open, then click Sync Token again.';
       tokenStatus.className = 'status error';
     }
   }
