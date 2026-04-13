@@ -44,20 +44,36 @@ function mapPrismaUserToRow(user: {
 }
 
 /**
- * Find user for login / duplicate check.
- * 1) Prisma Client first (case-insensitive) — never shadowed by a stale legacy `users` row.
- * 2) SQL `"User"` then 3) SQL `users` for installs that rely on raw SQL only.
+ * All rows that might authenticate this email (Prisma + raw `"User"` + legacy `users`).
+ * Deduped by `id` so the same row is not checked twice; order is Prisma variants first.
+ * Login must try `bcrypt.compare` against each until one matches (stale duplicate emails).
  */
-export async function findUserByEmailForAuth(email: string): Promise<AuthUserRow | null> {
+export async function findLoginCandidatesByEmail(email: string): Promise<AuthUserRow[]> {
   const e = normalizeAuthEmail(email);
+  const out: AuthUserRow[] = [];
+  const seenIds = new Set<string>();
+
+  const add = (row: AuthUserRow | null | undefined) => {
+    if (!row?.id || !row.password_hash) return;
+    if (seenIds.has(row.id)) return;
+    seenIds.add(row.id);
+    out.push(row);
+  };
 
   try {
-    const u = await prisma.user.findFirst({
+    const exact = await prisma.user.findUnique({ where: { email: e } });
+    if (exact) add(mapPrismaUserToRow(exact));
+  } catch (err: unknown) {
+    logger.warn('[auth] prisma.user findUnique:', err);
+  }
+
+  try {
+    const ci = await prisma.user.findFirst({
       where: { email: { equals: e, mode: 'insensitive' } },
     });
-    if (u) return mapPrismaUserToRow(u);
+    if (ci) add(mapPrismaUserToRow(ci));
   } catch (err: unknown) {
-    logger.warn('[auth] prisma.user findFirst:', err);
+    logger.warn('[auth] prisma.user findFirst (insensitive):', err);
   }
 
   try {
@@ -73,7 +89,7 @@ export async function findUserByEmailForAuth(email: string): Promise<AuthUserRow
        WHERE LOWER(TRIM(email)) = $1`,
       [e]
     );
-    if (r.rows?.length) return r.rows[0];
+    for (const row of r.rows ?? []) add(row);
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;
     if (code !== '42P01' && code !== '42703') {
@@ -91,7 +107,7 @@ export async function findUserByEmailForAuth(email: string): Promise<AuthUserRow
        WHERE LOWER(TRIM(email)) = $1`,
       [e]
     );
-    if (r.rows?.length) return r.rows[0];
+    for (const row of r.rows ?? []) add(row);
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;
     if (code !== '42P01' && code !== '42703') {
@@ -99,7 +115,7 @@ export async function findUserByEmailForAuth(email: string): Promise<AuthUserRow
     }
   }
 
-  return null;
+  return out;
 }
 
 /** Minimal row for JWT middleware: id, email, subscription. */

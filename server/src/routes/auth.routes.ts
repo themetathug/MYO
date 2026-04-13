@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import { findUserByEmailForAuth, insertUserForAuth, normalizeAuthEmail } from '../database/auth-queries';
+import { findLoginCandidatesByEmail, insertUserForAuth, normalizeAuthEmail } from '../database/auth-queries';
 import { logger } from '../utils/logger';
 import { validateRequest } from '../middleware/validation.middleware';
 import { generateToken, verifyToken } from '../utils/jwt.utils';
@@ -29,8 +29,8 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
   try {
     const { email, password, firstName, lastName } = req.body;
 
-    const existing = await findUserByEmailForAuth(email);
-    if (existing) {
+    const existingAccounts = await findLoginCandidatesByEmail(email);
+    if (existingAccounts.length > 0) {
       return res.status(400).json({
         error: 'User already exists',
         message: 'An account with this email already exists',
@@ -91,22 +91,24 @@ router.post('/login', validateRequest(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await findUserByEmailForAuth(email);
+    const candidates = await findLoginCandidatesByEmail(email);
 
-    if (!user) {
+    if (candidates.length === 0) {
       return res.status(401).json({
         error: 'Invalid credentials',
         message: 'Email or password is incorrect',
       });
     }
 
-    if (!user.id || !user.password_hash) {
-      throw new Error('Invalid user data returned from database');
+    let user = null as (typeof candidates)[0] | null;
+    for (const row of candidates) {
+      if (row.password_hash && (await bcrypt.compare(password, row.password_hash))) {
+        user = row;
+        break;
+      }
     }
 
-    // Verify password
-    const isValid = await bcrypt.compare(password, user.password_hash);
-    if (!isValid) {
+    if (!user) {
       return res.status(401).json({
         error: 'Invalid credentials',
         message: 'Email or password is incorrect',
