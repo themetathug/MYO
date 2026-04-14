@@ -10,7 +10,16 @@ function isLikelyJwt(token) {
   );
 }
 
-/** Copy JWT from an open Job Tracker tab (localhost) into extension storage — works from LinkedIn. */
+const UKJT_STORAGE_API_BASE = 'ukjt_apiBaseUrl';
+
+function normalizeExtensionApiUrl(raw) {
+  if (typeof raw === 'string' && /^https?:\/\//i.test(raw)) {
+    return raw.replace(/\/$/, '');
+  }
+  return null;
+}
+
+/** Copy JWT + API origin from an open Job Tracker tab into extension storage — works from LinkedIn. */
 async function pullTokenFromOpenDashboardTabs() {
   const tabs = await chrome.tabs.query({});
   const candidates = tabs.filter(
@@ -18,24 +27,32 @@ async function pullTokenFromOpenDashboardTabs() {
       t.id &&
       t.url &&
       (/\/\/localhost:(3000|3001|3002|3003)\b/.test(t.url) ||
-        /\/\/127\.0\.0\.1:(3000|3001|3002|3003)\b/.test(t.url))
+        /\/\/127\.0\.0\.1:(3000|3001|3002|3003)\b/.test(t.url) ||
+        /\.vercel\.app\//.test(t.url))
   );
 
   for (const tab of candidates) {
     try {
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: () => {
+        func: (storageKey) => {
           try {
-            return localStorage.getItem('token');
+            return {
+              token: localStorage.getItem('token'),
+              apiBaseUrl: localStorage.getItem(storageKey),
+            };
           } catch {
-            return null;
+            return { token: null, apiBaseUrl: null };
           }
         },
+        args: [UKJT_STORAGE_API_BASE],
       });
-      const token = results?.[0]?.result;
+      const payload = results?.[0]?.result;
+      const token = payload?.token;
+      const fromPage = normalizeExtensionApiUrl(payload?.apiBaseUrl);
       if (isLikelyJwt(token)) {
-        await chrome.storage.local.set({ token, apiUrl: 'http://localhost:3001' });
+        const apiUrl = fromPage || 'http://localhost:3001';
+        await chrome.storage.local.set({ token, apiUrl });
         return token;
       }
     } catch {

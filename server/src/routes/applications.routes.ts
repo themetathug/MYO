@@ -43,15 +43,45 @@ async function getColdEmailAggregates(
   }
 }
 
+const APPLICATION_STATUSES = [
+  'APPLIED',
+  'VIEWED',
+  'SHORTLISTED',
+  'INTERVIEW_SCHEDULED',
+  'INTERVIEWED',
+  'OFFERED',
+  'REJECTED',
+  'WITHDRAWN',
+  'ACCEPTED',
+] as const;
+
+const applicationStatusSchema = z.preprocess((val: unknown) => {
+  if (val === undefined || val === null || val === '') return 'APPLIED';
+  if (typeof val !== 'string') return 'APPLIED';
+  const v = val.trim().toUpperCase();
+  if (v === 'IN_PROGRESS' || v === 'UNDER_REVIEW' || v === 'PENDING') return 'APPLIED';
+  if (v === 'INTERVIEW' || v === 'INTERVIEWING') return 'INTERVIEWED';
+  if ((APPLICATION_STATUSES as readonly string[]).includes(v)) return v;
+  return 'APPLIED';
+}, z.enum(APPLICATION_STATUSES));
+
+const optionalJobUrl = z.preprocess(
+  (val) => {
+    if (val === '' || val === null || val === undefined) return undefined;
+    return val;
+  },
+  z.string().url().optional()
+);
+
 // Validation schemas
 const createApplicationSchema = z.object({
   company: z.string().min(1).max(255),
   position: z.string().min(1).max(255),
   location: z.string().optional(),
   jobBoardSource: z.string().optional(),
-  jobUrl: z.string().url().optional(),
+  jobUrl: optionalJobUrl,
   salary: z.string().optional(),
-  status: z.enum(['APPLIED', 'VIEWED', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'INTERVIEWED', 'OFFERED', 'REJECTED', 'WITHDRAWN', 'ACCEPTED']).default('APPLIED'),
+  status: applicationStatusSchema,
   notes: z.string().optional(),
   timeSpent: z.number().optional(),
   captureMethod: z.enum(['MANUAL', 'EXTENSION', 'EMAIL_SYNC', 'API']).default('MANUAL'),

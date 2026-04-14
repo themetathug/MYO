@@ -129,8 +129,11 @@ export type AuthUserJwtRow = {
  * Load user by id for auth middleware. Prisma first, then SQL `"User"`, then `users`.
  */
 export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRow | null> {
+  const id = typeof userId === 'string' ? userId.trim().toLowerCase() : '';
+  if (!id) return null;
+
   try {
-    const u = await prisma.user.findUnique({ where: { id: userId } });
+    const u = await prisma.user.findUnique({ where: { id } });
     if (u) {
       return {
         id: u.id,
@@ -147,7 +150,7 @@ export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRo
       `SELECT id::text AS id, email, "subscription"::text AS subscription
        FROM "User"
        WHERE id = $1`,
-      [userId]
+      [id]
     );
     if (r.rows?.length) return r.rows[0];
   } catch (err: unknown) {
@@ -162,7 +165,7 @@ export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRo
       `SELECT id::text AS id, email, subscription::text AS subscription
        FROM users
        WHERE id = $1`,
-      [userId]
+      [id]
     );
     if (r.rows?.length) return r.rows[0];
   } catch (err: unknown) {

@@ -96,6 +96,9 @@ const SITE_SELECTORS = {
   }
 };
 
+/** Must match client `UKJT_STORAGE_API_BASE` in `client/src/lib/api.ts`. */
+const UKJT_STORAGE_API_BASE = 'ukjt_apiBaseUrl';
+
 /** Real API JWTs are three dot-separated segments; demo login uses `mock-token` which always 401s the API. */
 function isLikelyJwt(token) {
   return (
@@ -135,7 +138,12 @@ async function getJobTrackerAuthToken() {
     try {
       const pageToken = localStorage.getItem('token');
       if (isLikelyJwt(pageToken)) {
-        await chrome.storage.local.set({ token: pageToken });
+        const pageApi = localStorage.getItem(UKJT_STORAGE_API_BASE);
+        const toSet = { token: pageToken };
+        if (typeof pageApi === 'string' && /^https?:\/\//i.test(pageApi)) {
+          toSet.apiUrl = pageApi.replace(/\/$/, '');
+        }
+        await chrome.storage.local.set(toSet);
         return pageToken;
       }
     } catch (e) {
@@ -570,20 +578,23 @@ class JobCapture {
             
             if (position && company) {
               // Normalize jobUrl - remove query params and ensure proper format for duplicate checking
-              let validJobUrl = jobUrl ? jobUrl.split('?')[0].trim() : window.location.href.split('?')[0].trim();
+              let validJobUrl = jobUrl ? jobUrl.split('?')[0].trim() : '';
               if (validJobUrl && !validJobUrl.startsWith('http://') && !validJobUrl.startsWith('https://')) {
                 validJobUrl = `https://${validJobUrl.replace(/^\/+/, '')}`;
               }
-              // Remove trailing slash for consistency
               if (validJobUrl) {
                 validJobUrl = validJobUrl.replace(/\/+$/, '');
               }
-              
+              if (!validJobUrl || !validJobUrl.includes('/jobs/')) {
+                console.warn('⚠️ Skipped entity card without a real job URL:', position?.substring(0, 60));
+                return;
+              }
+
               const jobData = {
                 position: position.trim().substring(0, 255),
                 company: company.replace(/^at\s+/, '').trim().substring(0, 255), // Remove "at " prefix and trim
                 location: location && location !== 'Not specified' ? location.trim().substring(0, 255) : undefined,
-                jobUrl: validJobUrl || undefined,
+                jobUrl: validJobUrl,
                 jobBoardSource: 'LinkedIn',
                 status: this.parseApplicationStatus(appliedText),
                 captureMethod: 'EXTENSION'
@@ -751,16 +762,19 @@ class JobCapture {
         }
       }
       
-      console.log(`📊 Total jobs captured: ${jobs.length}`);
-      this.showNotification(`✅ Found ${jobs.length} applied jobs! Sending to dashboard...`, 'success');
-      
-      // Save to backend
-      await this.bulkSaveToBackend(jobs);
+      const deduped = this.dedupeJobsForBulk(jobs);
+      if (deduped.length < jobs.length) {
+        console.log(`📎 Removed ${jobs.length - deduped.length} duplicate row(s) before save`);
+      }
+      console.log(`📊 Total jobs captured: ${deduped.length}`);
+      this.showNotification(`✅ Found ${deduped.length} applied jobs! Sending to dashboard...`, 'success');
+
+      await this.bulkSaveToBackend(deduped);
       
       return {
         success: true,
-        count: jobs.length,
-        jobs: jobs
+        count: deduped.length,
+        jobs: deduped
       };
       
     } catch (error) {
@@ -831,17 +845,101 @@ class JobCapture {
     return now.toISOString();
   }
 
-  // Parse application status from LinkedIn text
+  /**
+   * Map LinkedIn UI copy to POST /api/applications status enum only.
+   * Backend rejects IN_PROGRESS, INTERVIEW, etc. (Zod) — those caused bulk import 400s.
+   */
   parseApplicationStatus(text) {
     if (!text) return 'APPLIED';
-    
+
     const lowerText = text.toLowerCase();
-    if (lowerText.includes('viewed')) return 'VIEWED';
-    if (lowerText.includes('in progress')) return 'IN_PROGRESS';
     if (lowerText.includes('not selected')) return 'REJECTED';
-    if (lowerText.includes('interview')) return 'INTERVIEW';
-    
+    if (lowerText.includes('interview')) return 'INTERVIEWED';
+    if (lowerText.includes('viewed')) return 'VIEWED';
+    if (lowerText.includes('in progress')) return 'APPLIED';
+
     return 'APPLIED';
+  }
+
+  /**
+   * Drop duplicate rows from one scrape before POSTing.
+   * Same job URL twice → keep one. No URL → dedupe by company|||title only (same-card duplicates).
+   * Different URLs with same title/company are kept (two real listings).
+   */
+  dedupeJobsForBulk(jobs) {
+    const normUrl = (u) => {
+      if (!u || typeof u !== 'string') return '';
+      try {
+        return u.split('?')[0].replace(/\/+$/, '').toLowerCase();
+      } catch {
+        return '';
+      }
+    };
+    const seenUrl = new Set();
+    const seenKey = new Set();
+    const out = [];
+    for (const job of jobs) {
+      const u = normUrl(job.jobUrl);
+      const cp = `${(job.company || '').trim().toLowerCase()}|||${(job.position || '').trim().toLowerCase()}`;
+      if (u) {
+        if (seenUrl.has(u)) continue;
+        seenUrl.add(u);
+      } else {
+        if (seenKey.has(cp)) continue;
+        seenKey.add(cp);
+      }
+      out.push(job);
+    }
+    return out;
+  }
+
+  /** Align any caller-provided status with POST /api/applications enum (defensive). */
+  normalizeStatusForApi(status) {
+    const allowed = new Set([
+      'APPLIED',
+      'VIEWED',
+      'SHORTLISTED',
+      'INTERVIEW_SCHEDULED',
+      'INTERVIEWED',
+      'OFFERED',
+      'REJECTED',
+      'WITHDRAWN',
+      'ACCEPTED',
+    ]);
+    if (!status || typeof status !== 'string') return 'APPLIED';
+    const v = status.trim().toUpperCase();
+    if (v === 'IN_PROGRESS' || v === 'UNDER_REVIEW' || v === 'PENDING') return 'APPLIED';
+    if (v === 'INTERVIEW' || v === 'INTERVIEWING') return 'INTERVIEWED';
+    if (allowed.has(v)) return v;
+    return 'APPLIED';
+  }
+
+  /** Payload fields the API accepts; strip bad URLs so Zod optional does not fail on "". */
+  sanitizeJobForApi(job) {
+    const company = ((job.company || '').trim() || 'Unknown Company').substring(0, 255);
+    const position = (job.position || '').trim().substring(0, 255);
+    const payload = {
+      company,
+      position,
+      jobBoardSource: String(job.jobBoardSource || 'LinkedIn').substring(0, 100),
+      status: this.normalizeStatusForApi(job.status),
+      captureMethod: ['MANUAL', 'EXTENSION', 'EMAIL_SYNC', 'API'].includes(job.captureMethod)
+        ? job.captureMethod
+        : 'EXTENSION',
+    };
+    if (job.location && String(job.location).trim()) {
+      payload.location = String(job.location).trim().substring(0, 255);
+    }
+    const rawUrl = job.jobUrl;
+    if (
+      rawUrl &&
+      typeof rawUrl === 'string' &&
+      (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) &&
+      rawUrl.includes('/jobs/')
+    ) {
+      payload.jobUrl = rawUrl.split('?')[0].replace(/\/+$/, '');
+    }
+    return payload;
   }
 
   // Wait for content to load with retry
@@ -908,31 +1006,46 @@ class JobCapture {
       for (const job of jobs) {
         try {
           // Log what we're sending (first job only, to avoid spam)
+          const payload = this.sanitizeJobForApi(job);
           if (successCount + duplicateCount + failCount === 0) {
-            console.log('📤 Sample job data being sent:', {
+            console.log('📤 Sample payload POST /api/applications:', payload);
+          }
+          if (!payload.position || payload.position.length < 1) {
+            failCount++;
+            failedJobsDetails.push({
               position: job.position,
               company: job.company,
-              location: job.location,
-              jobUrl: job.jobUrl,
-              jobBoardSource: job.jobBoardSource,
-              status: job.status,
-              applied_at: job.applied_at
+              error: 'Missing position after sanitize',
+              jobData: job,
             });
+            continue;
           }
-          
+
           const response = await fetch(`${apiBase}/api/applications`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify(job)
+            body: JSON.stringify(payload)
           });
 
           if (response.status === 401) {
+            let serverMsg = '';
+            try {
+              const body = await response.clone().json();
+              serverMsg = (body && (body.message || body.error)) || '';
+            } catch (_) {
+              /* ignore */
+            }
             await chrome.storage.local.remove(['token']);
-            const authErr =
-              'API rejected your token (401). Log in at http://localhost:3000 with a real account, open the extension → Sync Token, then try again.';
+            const mismatchHint =
+              /user not found/i.test(serverMsg) || /invalid token/i.test(serverMsg)
+                ? ' If you use a hosted dashboard, click Sync Token again so the extension uses the same API URL as the app.'
+                : '';
+            const authErr = serverMsg
+              ? `API rejected your token (401): ${serverMsg}.${mismatchHint} Log in (not Demo), then extension → Sync Token.`
+              : `API rejected your token (401). Log in with a real account, open the extension → Sync Token, then try again.${mismatchHint}`;
             this.showNotification(authErr, 'error');
             throw new Error(authErr);
           }
@@ -940,11 +1053,10 @@ class JobCapture {
           if (response.ok) {
             const result = await response.json().catch(() => ({}));
             if (result.duplicate) {
-              // Duplicate detected and skipped - log it
               duplicateCount++;
               console.log(`⚠️ Duplicate skipped: ${job.position} at ${job.company}`);
             } else {
-            successCount++;
+              successCount++;
               if (successCount === 1) {
                 console.log('✅ First job saved successfully:', result);
               }
@@ -987,7 +1099,8 @@ class JobCapture {
             failedJobsDetails.push(errorDetails);
             
             console.error(`❌ Failed to save job #${failCount}:`, errorDetails);
-            console.error(`   Full job data:`, JSON.stringify(job, null, 2));
+            console.error(`   Payload sent:`, JSON.stringify(payload, null, 2));
+            console.error(`   Raw job:`, JSON.stringify(job, null, 2));
           }
         } catch (err) {
           failCount++;

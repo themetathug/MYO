@@ -3,10 +3,11 @@ import jwt from 'jsonwebtoken';
 import { findUserByIdForAuth } from '../database/auth-queries';
 import { logger } from '../utils/logger';
 
-interface JwtPayload {
-  userId: string;
-  iat: number;
-  exp: number;
+function readUserIdFromJwtPayload(decoded: string | jwt.JwtPayload): string | undefined {
+  if (typeof decoded === 'string') return undefined;
+  const o = decoded as Record<string, unknown>;
+  const raw = o.userId ?? o.sub;
+  return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
 }
 
 declare global {
@@ -49,9 +50,17 @@ export async function authMiddleware(
         issuer: 'uk-jobs-insider',
         audience: 'job-tracker',
       }
-    ) as JwtPayload;
+    ) as jwt.JwtPayload;
 
-    const userRow = await findUserByIdForAuth(decoded.userId);
+    const userId = readUserIdFromJwtPayload(decoded);
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Invalid token',
+        message: 'Token missing user id.',
+      });
+    }
+
+    const userRow = await findUserByIdForAuth(userId);
 
     if (!userRow) {
       return res.status(401).json({
@@ -111,9 +120,10 @@ export async function optionalAuthMiddleware(
         issuer: 'uk-jobs-insider',
         audience: 'job-tracker',
       }
-    ) as JwtPayload;
+    ) as jwt.JwtPayload;
 
-    const userRow = await findUserByIdForAuth(decoded.userId);
+    const userId = readUserIdFromJwtPayload(decoded);
+    const userRow = userId ? await findUserByIdForAuth(userId) : null;
 
     if (userRow) {
       req.user = {

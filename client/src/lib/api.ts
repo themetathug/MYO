@@ -1,5 +1,8 @@
 // API service for backend communication
 
+/** localStorage key: backend origin used for login (so the Chrome extension calls the same API). */
+export const UKJT_STORAGE_API_BASE = 'ukjt_apiBaseUrl';
+
 /**
  * In the browser, when `NEXT_PUBLIC_API_URL` is unset, use same-origin `/api` so Next.js
  * rewrites proxy to the real API (avoids broken `undefined/api/...` URLs on Vercel).
@@ -10,6 +13,39 @@ export function getApiBaseUrl(): string {
     return fromEnv || '';
   }
   return fromEnv || 'http://localhost:3001';
+}
+
+/**
+ * Absolute base the SPA uses for `/api/*` (no trailing slash). Extension must match this
+ * or JWT validates against one server while POSTs go to another → 401 User not found.
+ */
+export function getResolvedApiOriginForExtension(): string {
+  const base = getApiBaseUrl();
+  if (base && /^https?:\/\//i.test(base)) {
+    return base.replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return 'http://localhost:3001';
+}
+
+export function persistApiBaseForExtension(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(UKJT_STORAGE_API_BASE, getResolvedApiOriginForExtension());
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearApiBaseForExtension(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(UKJT_STORAGE_API_BASE);
+  } catch {
+    /* ignore */
+  }
 }
 
 // Helper to get auth token
@@ -42,6 +78,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
       // Clear invalid token
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
+        clearApiBaseForExtension();
         // Redirect to login page if not already there
         if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
           window.location.href = '/login?expired=true';

@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import { CustomCursor } from '../../components/CustomCursor';
 import { ParticleBackground } from '../../components/ParticleBackground';
-import { authAPI } from '../../lib/api';
+import { authAPI, persistApiBaseForExtension } from '../../lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -48,7 +48,8 @@ export default function RegisterPage() {
       // Store token and user data
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      
+      persistApiBaseForExtension();
+
       toast.success('Account created successfully! 🎉');
       router.push('/dashboard');
     } catch (error: any) {

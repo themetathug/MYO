@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import { CustomCursor } from '../../components/CustomCursor';
 import { ParticleBackground } from '../../components/ParticleBackground';
-import { authAPI } from '../../lib/api';
+import { authAPI, persistApiBaseForExtension } from '../../lib/api';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -36,6 +36,7 @@ export default function LoginForm() {
 
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      persistApiBaseForExtension();
       toast.success('Login successful!');
       router.push('/dashboard');
     } catch (error) {

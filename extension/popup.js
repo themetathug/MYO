@@ -36,6 +36,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     );
   }
 
+  const UKJT_STORAGE_API_BASE = 'ukjt_apiBaseUrl';
+
+  function normalizeExtensionApiUrl(raw) {
+    if (typeof raw === 'string' && /^https?:\/\//i.test(raw)) {
+      return raw.replace(/\/$/, '');
+    }
+    return null;
+  }
+
   // Sync auth token from frontend localStorage
   async function syncAuthToken() {
     try {
@@ -47,7 +56,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           tab.url.includes('localhost:3000') || 
           tab.url.includes('localhost:3001') || 
           tab.url.includes('localhost:3002') || 
-          tab.url.includes('localhost:3003')
+          tab.url.includes('localhost:3003') ||
+          tab.url.includes('127.0.0.1:') ||
+          /\.vercel\.app\//.test(tab.url)
         )
       );
       if (tabs.length > 0) {
@@ -55,23 +66,30 @@ document.addEventListener('DOMContentLoaded', async () => {
           // Inject script to read localStorage
           const results = await chrome.scripting.executeScript({
             target: { tabId: tabs[0].id },
-            func: () => {
+            func: (storageKey) => {
               try {
-                return localStorage.getItem('token');
+                return {
+                  token: localStorage.getItem('token'),
+                  apiBaseUrl: localStorage.getItem(storageKey),
+                };
               } catch (e) {
-                return null;
+                return { token: null, apiBaseUrl: null };
               }
-            }
+            },
+            args: [UKJT_STORAGE_API_BASE],
           });
           
           if (results && results[0] && results[0].result) {
-            const token = results[0].result;
+            const payload = results[0].result;
+            const token = payload.token;
             if (token === 'mock-token') {
               console.warn('Demo token cannot be used with the API.');
               return false;
             }
             if (token && token !== 'null' && token !== 'undefined' && isLikelyJwt(token)) {
-              await chrome.storage.local.set({ token });
+              const fromPage = normalizeExtensionApiUrl(payload.apiBaseUrl);
+              const apiUrl = fromPage || 'http://localhost:3001';
+              await chrome.storage.local.set({ token, apiUrl });
               console.log('✅ Token synced to extension from frontend tab');
               return true;
             }
