@@ -31,6 +31,12 @@ const app = express();
 const server = createServer(app);
 const DEFAULT_PORT = parseInt(process.env.PORT || '3001', 10);
 
+// Render / any reverse proxy sends X-Forwarded-For. Required so express-rate-limit and req.ip
+// are correct (see ERR_ERL_UNEXPECTED_X_FORWARDED_FOR). RENDER is set by Render.com.
+if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
+  app.set('trust proxy', 1);
+}
+
 // Helper function to check if a port is available
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
