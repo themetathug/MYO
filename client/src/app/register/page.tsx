@@ -43,6 +43,8 @@ export default function RegisterPage() {
         password: formData.password,
         firstName: formData.firstName,
         lastName: formData.lastName,
+        consentTracking: formData.consentTracking,
+        consentAnalytics: formData.consentAnalytics,
       });
       
       // Store token and user data

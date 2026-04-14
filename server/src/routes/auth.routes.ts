@@ -24,10 +24,47 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+function registrationFailurePayload(error: unknown): {
+  message: string;
+  hint?: string;
+} {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P1001') {
+      return {
+        message: 'Cannot reach the database server.',
+        hint: 'On Render: verify DATABASE_URL and that the database allows connections from Render.',
+      };
+    }
+    if (error.code === 'P2021' || error.code === 'P2022') {
+      return {
+        message: 'The database schema is not ready for sign-up.',
+        hint: 'On your API host run: npx prisma migrate deploy (then try again).',
+      };
+    }
+  }
+  const errName = error instanceof Error ? error.name : '';
+  if (errName === 'PrismaClientInitializationError') {
+    return {
+      message: 'Cannot connect to the database.',
+      hint: 'Check DATABASE_URL on Render (cloud Postgres often needs ?sslmode=require).',
+    };
+  }
+  if (error instanceof Error && error.message.includes('Failed to create user: neither')) {
+    return {
+      message: 'No user table available for registration.',
+      hint: 'Run Prisma migrations on the server: npx prisma migrate deploy.',
+    };
+  }
+  return {
+    message: 'Unable to create account. Please try again.',
+    hint: 'See API logs on Render for details.',
+  };
+}
+
 // Register endpoint
 router.post('/register', validateRequest(registerSchema), async (req, res) => {
   try {
-    const { email, password, firstName, lastName } = req.body;
+    const { email, password, firstName, lastName, consentTracking, consentAnalytics } = req.body;
 
     const existingAccounts = await findLoginCandidatesByEmail(email);
     if (existingAccounts.length > 0) {
@@ -46,6 +83,8 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
       passwordHash,
       firstName: firstName || null,
       lastName: lastName || null,
+      consentTracking: Boolean(consentTracking),
+      consentAnalytics: Boolean(consentAnalytics),
     });
 
     if (!user?.id) {
@@ -78,9 +117,11 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
     }
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.error('Registration error:', error);
+    const { message, hint } = registrationFailurePayload(error);
     res.status(500).json({
       error: 'Registration failed',
-      message: 'Unable to create account. Please try again.',
+      message,
+      hint,
       details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
     });
   }

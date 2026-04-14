@@ -107,7 +107,11 @@ async function fetchPublicJson(endpoint: string, options: RequestInit = {}) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(errorData.message || `HTTP ${response.status}`);
+    const msg = errorData.message || `HTTP ${response.status}`;
+    const hint = typeof errorData.hint === 'string' ? errorData.hint : '';
+    const details = typeof errorData.details === 'string' ? errorData.details : '';
+    const combined = [msg, hint, details].filter(Boolean).join(' ');
+    throw new Error(combined || 'Request failed');
   }
 
   return response.json();
@@ -115,7 +119,14 @@ async function fetchPublicJson(endpoint: string, options: RequestInit = {}) {
 
 // Auth APIs
 export const authAPI = {
-  register: async (data: { email: string; password: string; firstName?: string; lastName?: string }) => {
+  register: async (data: {
+    email: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+    consentTracking?: boolean;
+    consentAnalytics?: boolean;
+  }) => {
     return fetchPublicJson('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),

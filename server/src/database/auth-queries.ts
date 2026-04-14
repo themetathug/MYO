@@ -187,8 +187,10 @@ export async function insertUserForAuth(params: {
   passwordHash: string;
   firstName: string | null;
   lastName: string | null;
+  consentTracking?: boolean;
+  consentAnalytics?: boolean;
 }): Promise<AuthUserRow> {
-  const { email, passwordHash, firstName, lastName } = params;
+  const { email, passwordHash, firstName, lastName, consentTracking, consentAnalytics } = params;
 
   try {
     const user = await prisma.user.create({
@@ -197,6 +199,8 @@ export async function insertUserForAuth(params: {
         passwordHash,
         firstName: firstName ?? undefined,
         lastName: lastName ?? undefined,
+        consentTracking: consentTracking ?? false,
+        consentAnalytics: consentAnalytics ?? false,
       },
     });
     const row = mapPrismaUserToRow(user);
