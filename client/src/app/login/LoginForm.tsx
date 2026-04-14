@@ -40,24 +40,18 @@ export default function LoginForm() {
       toast.success('Login successful!');
       router.push('/dashboard');
     } catch (error) {
-      const trimmedEmail = formData.email.trim();
-      if (trimmedEmail === 'demo@ukjobsinsider.com' && formData.password === 'Demo123!') {
-        localStorage.setItem('token', 'mock-token');
-        localStorage.setItem(
-          'user',
-          JSON.stringify({
-            id: 'demo-user',
-            email: trimmedEmail,
-            firstName: 'Demo',
-            lastName: 'User',
-          })
+      const trimmedEmail = formData.email.trim().toLowerCase();
+      const isDemoAttempt =
+        trimmedEmail === 'demo@ukjobsinsider.com' && formData.password === 'Demo123!';
+      if (isDemoAttempt) {
+        toast.error(
+          'Demo account is not in this database yet. In Render → your API → Shell, run `npm run db:seed` from the server app folder (add `cd server` first if your shell starts at repo root). Then try again.',
+          { duration: 9000 }
         );
-        toast.success('Login successful! (Demo Mode)');
-        router.push('/dashboard');
         return;
       }
       const message =
-        error instanceof Error ? error.message : 'Unable to connect to server. Try demo account.';
+        error instanceof Error ? error.message : 'Unable to connect to server. Please try again.';
       toast.error(message);
     } finally {
       setIsLoading(false);

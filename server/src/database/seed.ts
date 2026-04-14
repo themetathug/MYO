@@ -3,15 +3,31 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+/** Production / investor demo — run once after migrate: `cd server && npm run db:seed` (e.g. Render Shell). */
 async function main() {
   console.log('🌱 Starting database seed...');
 
-  // Create demo user
   const passwordHash = await bcrypt.hash('Demo123!', 12);
-  
+
+  const demoProfile = {
+    onboardingCompleted: true,
+    preferredJobBoards: ['LinkedIn', 'Indeed', 'Reed'],
+    skills: ['JavaScript', 'TypeScript', 'React', 'Node.js'],
+    targetSalary: '£60,000+',
+  };
+
   const user = await prisma.user.upsert({
     where: { email: 'demo@ukjobsinsider.com' },
-    update: {},
+    update: {
+      passwordHash,
+      firstName: 'Demo',
+      lastName: 'User',
+      weeklyTarget: 10,
+      monthlyTarget: 40,
+      consentTracking: true,
+      consentAnalytics: true,
+      profileData: demoProfile,
+    },
     create: {
       email: 'demo@ukjobsinsider.com',
       passwordHash,
@@ -21,16 +37,20 @@ async function main() {
       monthlyTarget: 40,
       consentTracking: true,
       consentAnalytics: true,
-      profileData: {
-        onboardingCompleted: true,
-        preferredJobBoards: ['LinkedIn', 'Indeed', 'Reed'],
-        skills: ['JavaScript', 'TypeScript', 'React', 'Node.js'],
-        targetSalary: '£60,000+',
-      },
+      profileData: demoProfile,
     },
   });
 
-  console.log(`✓ Created user: ${user.email}`);
+  console.log(`✓ Demo user ready: ${user.email}`);
+
+  const existingApps = await prisma.application.count({ where: { userId: user.id } });
+  if (existingApps > 0) {
+    console.log(`✓ Demo user already has ${existingApps} applications; skipping sample data.`);
+    console.log('\n📝 Demo credentials:');
+    console.log('  Email: demo@ukjobsinsider.com');
+    console.log('  Password: Demo123!');
+    return;
+  }
 
   // Create CV versions
   const cvVersions = await Promise.all([
