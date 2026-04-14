@@ -129,7 +129,9 @@ export type AuthUserJwtRow = {
  * Load user by id for auth middleware. Prisma first, then SQL `"User"`, then `users`.
  */
 export async function findUserByIdForAuth(userId: string): Promise<AuthUserJwtRow | null> {
-  const id = typeof userId === 'string' ? userId.trim().toLowerCase() : '';
+  // Do not lowercase: PostgreSQL TEXT primary keys are case-sensitive; a mismatch
+  // makes every authed request 401 ("User not found") right after register/login.
+  const id = typeof userId === 'string' ? userId.trim() : '';
   if (!id) return null;
 
   try {
