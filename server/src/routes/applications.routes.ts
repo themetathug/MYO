@@ -673,12 +673,21 @@ router.get('/stats/summary', async (req, res) => {
         : 0,
     }));
 
-    // Get weekly goal from user settings
-    const userResult = await pool.query(
-      'SELECT weekly_target, monthly_target FROM users WHERE id = $1',
-      [userId]
-    );
-    const weeklyGoal = userResult.rows[0]?.weekly_target || 10;
+    // Get weekly goal from user settings (legacy `users` first, then Prisma `"User"` table)
+    let weeklyGoal = 10;
+    try {
+      const userResult = await pool.query(
+        'SELECT weekly_target, monthly_target FROM users WHERE id = $1',
+        [userId]
+      );
+      weeklyGoal = userResult.rows[0]?.weekly_target || 10;
+    } catch {
+      const userResult = await pool.query(
+        'SELECT "weeklyTarget" AS weekly_target FROM "User" WHERE id = $1',
+        [userId]
+      );
+      weeklyGoal = userResult.rows[0]?.weekly_target || 10;
+    }
     const weeklyAchievement = weeklyGoal > 0 
       ? Math.round((weeklyApplications / weeklyGoal) * 100 * 100) / 100 
       : 0;
