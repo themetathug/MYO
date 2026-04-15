@@ -8,6 +8,7 @@ export function ParticleBackground() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const c = canvas;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -28,8 +29,8 @@ export function ParticleBackground() {
       opacity: number;
 
       constructor() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
+        this.x = Math.random() * c.width;
+        this.y = Math.random() * c.height;
         this.size = Math.random() * 3 + 1;
         this.speedX = Math.random() * 1 - 0.5;
         this.speedY = Math.random() * 1 - 0.5;
@@ -51,10 +52,10 @@ export function ParticleBackground() {
         }
 
         // Wrap around screen
-        if (this.x < 0) this.x = canvas.width;
-        if (this.x > canvas.width) this.x = 0;
-        if (this.y < 0) this.y = canvas.height;
-        if (this.y > canvas.height) this.y = 0;
+        if (this.x < 0) this.x = c.width;
+        if (this.x > c.width) this.x = 0;
+        if (this.y < 0) this.y = c.height;
+        if (this.y > c.height) this.y = 0;
       }
 
       draw() {

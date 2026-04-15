@@ -209,7 +209,7 @@ export default function DashboardPage() {
                 Services
               </button>
               <button
-                onClick={() => toast.info('Applications page coming soon')}
+                onClick={() => toast('Applications page coming soon')}
                 className="px-4 py-2 text-gray-700 hover:text-indigo-600 font-medium transition"
               >
                 Applications

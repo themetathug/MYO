@@ -57,14 +57,13 @@ const getAuthToken = (): string | null => {
 // Helper to make authenticated requests
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   const token = getAuthToken();
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
 
+  const headers = new Headers(options.headers as HeadersInit | undefined);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
