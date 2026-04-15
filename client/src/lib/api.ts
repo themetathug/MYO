@@ -4,8 +4,8 @@
 export const UKJT_STORAGE_API_BASE = 'ukjt_apiBaseUrl';
 
 /**
- * In the browser, when `NEXT_PUBLIC_API_URL` is unset, use same-origin `/api` so Next.js
- * rewrites proxy to the real API (avoids broken `undefined/api/...` URLs on Vercel).
+ * In the browser, when `NEXT_PUBLIC_API_URL` is unset, use same-origin `/api` so
+ * `app/api/[[...path]]/route.ts` proxies to Render (must set BACKEND_URL or NEXT_PUBLIC_API_URL on Vercel).
  */
 export function getApiBaseUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, '');
